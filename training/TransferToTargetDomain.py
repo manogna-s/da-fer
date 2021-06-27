@@ -120,11 +120,6 @@ def Train(args, model, ad_net, random_layer, train_source_dataloader, train_targ
         end = time.time()
         feature, output, loc_output = model(torch.cat((data_source, data_target), 0), torch.cat((landmark_source, landmark_target), 0), False)
         feat_target = feature[args.train_batch:,:]
-        #feat_target, out_target, loc_out_target = model(data_target, landmark_target, False)
-        #feat_source, out_source, loc_out_source = model(data_source, landmark_source, False)
-        #feature = torch.cat((feat_source,feat_target),0)
-        #output = torch.cat((out_target,out_source),0)
-        #loc_output = torch.cat((loc_out_source,loc_out_target),0)
         batch_time.update(time.time()-end)
 
         # Compute Loss
@@ -142,21 +137,10 @@ def Train(args, model, ad_net, random_layer, train_source_dataloader, train_targ
                 dan_loss_ = CDAN([feature, softmax_output], ad_net, None, None, random_layer)
             elif args.dan_method == 'DANN':
                 dan_loss_ = DANN(feature, ad_net)
-                print(dan_loss_)
-            elif args.dan_method == "MME":
-                    dan_loss_  = MME(model, feat_target,lamda=0.1)
-                    #dan_loss_.backward()
-                    if epoch >=1000:
-                        a, b, _, _, pl_loss = do_fixmatch(f, data_target_,label_target,landmark_target,model,0.975,nn.CrossEntropyLoss(reduce='none'))
-                        sum_ = sum_ + a
-                        sum_batch = sum_batch + b
         else:
             dan_loss_ = 0
 
-        if epoch >= 1000    :
-                    loss_ = global_cls_loss_ + local_cls_loss_ + pl_loss
-        else:
-            loss_ = global_cls_loss_ + local_cls_loss_
+        loss_ = global_cls_loss_ + local_cls_loss_
             
         if args.use_afn:
             loss_+=afn_loss_
@@ -174,11 +158,10 @@ def Train(args, model, ad_net, random_layer, train_source_dataloader, train_targ
                 else:
                     op_out = torch.bmm(softmax_output.unsqueeze(2), feature.unsqueeze(1))
                     adnet_output = ad_net(op_out.view(-1, softmax_output.size(1) * feature.size(1)))
-            elif args.dan_method=='DANN' or args.dan_method == 'MME': 
+            elif args.dan_method=='DANN': 
                 adnet_output = ad_net(feature)
 
             adnet_output = adnet_output.cpu().data.numpy()
-                
             adnet_output[adnet_output>0.5] = 1
             adnet_output[adnet_output<=0.5] = 0
             num_ADNet+=np.sum(adnet_output[:args.train_batch]) + (args.train_batch - np. sum(adnet_output[args.train_batch:]))
@@ -192,9 +175,9 @@ def Train(args, model, ad_net, random_layer, train_source_dataloader, train_targ
             loss_.backward()
 
         optimizer.step()
-        if not args.dan_method == "MME":
-            if args.use_dan:
-                optimizer_ad.step()
+        
+        if args.use_dan:
+            optimizer_ad.step()
 
         # Compute accuracy, precision and recall
         Compute_Accuracy(args, output.narrow(0, 0, data_source.size(0)), label_source, acc, prec, recall)

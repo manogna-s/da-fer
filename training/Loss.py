@@ -24,15 +24,6 @@ def DANN(features, ad_net):
         dc_target = dc_target.cuda()
 
     return nn.BCELoss()(ad_out, dc_target)
-    
-def MME_loss(features, coeff = 1):
-    '''
-    Paper Link : https://arxiv.org/pdf/1904.06487.pdf
-    Github Link : https://github.com/VisionLearningGroup/SSDA_MME
-    '''
-    ad_out = adentropy(features)
-    ad_out.register_hook(grl_hook(coeff))
-    return ad_out
 
 def grl_hook(coeff):
     def fun1(grad):
@@ -40,17 +31,15 @@ def grl_hook(coeff):
     return fun1
 
 def MME(model, feat, lamda=0.1, coeff=1.0,mode='standard'):
+    '''
+    Paper Link : https://arxiv.org/pdf/1904.06487.pdf
+    Github Link : https://github.com/VisionLearningGroup/SSDA_MME
+    '''
     if mode == 'minimax':
         feat.register_hook(grl_hook(coeff))
-    #feat = F.normalize(feat,dim=1)
     feat =  model.fc(feat)
     feat = F.softmax(feat)
     loss_adent = lamda * torch.mean(torch.sum(feat * (torch.log(feat + 1e-5)), 1))
-    return loss_adent
-
-def adentropy(feat, lamda=0.1):
-    feat = F.softmax(feat)
-    loss_adent = - lamda * torch.mean(torch.sum(feat * (torch.log(feat + 1e-5)), 1))
     return loss_adent
 
 

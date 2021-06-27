@@ -20,8 +20,8 @@ import torchvision.transforms as transforms
 
 from torch.utils.tensorboard import SummaryWriter
 
-from Loss import HAFN, SAFN
-from Utils import *
+from utils.Loss import HAFN, SAFN
+from utils.Utils import *
 
 parser = argparse.ArgumentParser(description='Expression Classification Training')
 

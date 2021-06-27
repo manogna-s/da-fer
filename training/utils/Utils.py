@@ -29,6 +29,7 @@ import torchvision.transforms as transforms
 
 from utils.Dataset import MyDataset
 from models.VGG import VGG, VGG_onlyGlobal
+from models.ResNet_GCN import IR_GCN, IR_onlyGlobal_GCN
 from models.ResNet import IR, IR_onlyGlobal
 from models.MobileNet import MobileNetV2, MobileNetV2_onlyGlobal
 from models.AdversarialNetwork import RandomLayer, AdversarialNetwork, calc_coeff
@@ -136,13 +137,25 @@ def Compute_Accuracy(args, pred, target, acc, prec, recall):
         # Compute Recall of Positive --> TP/(TP+FN)
         recall[i].update(TP,np.sum(target==i))
 
+def Build_Backbone(args):
+    if args.local_feat:
+        if args.net == 'ResNet 50':
+            model = IR_local(50,args.class_num)
+        else:
+            print('Add the model you want :P')
+    else:
+        if args.net == 'ResNet50':
+            model = IR_global(50,args.class_num)
+        else:
+            print('Add the model you want :P')
+
 def BulidModel(args):
     """Bulid Model."""
     if args.local_feat:
         if args.net == 'ResNet18':
-            model = IR(18, args.intra_gcn, args.inter_gcn, args.rand_mat, args.all1_mat, args.use_cov, args.use_cluster,args.class_num)
+            model = IR_GCN(18, args.intra_gcn, args.inter_gcn, args.rand_mat, args.all1_mat, args.use_cov, args.use_cluster,args.class_num)
         elif args.net == 'ResNet50':
-            model = IR(50, args.intra_gcn, args.inter_gcn, args.rand_mat, args.all1_mat, args.use_cov, args.use_cluster,args.class_num)
+            model = IR_GCN(50, args.intra_gcn, args.inter_gcn, args.rand_mat, args.all1_mat, args.use_cov, args.use_cluster,args.class_num)
         elif args.net == 'VGGNet':
             model = VGG(args.intra_gcn, args.inter_gcn, args.rand_mat, args.all1_mat, args.use_cov, args.use_cluster, args.class_num)
         elif args.net == 'MobileNet':
@@ -151,7 +164,7 @@ def BulidModel(args):
         if args.net == 'ResNet18':
             model = IR_onlyGlobal(18)
         elif args.net == 'ResNet50':
-            model = IR_onlyGlobal(50)
+            model = IR_onlyGlobal_GCN(50, args.class_num)
         elif args.net == 'VGGNet':
             model = VGG_onlyGlobal()
         elif args.net == 'MobileNet':

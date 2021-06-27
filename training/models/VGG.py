@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 from torch.nn import Linear, Conv2d, BatchNorm1d, BatchNorm2d, PReLU, ReLU, Sigmoid, Dropout, MaxPool2d, AdaptiveAvgPool2d, Sequential, Module
 
-from GraphConvolutionNetwork import GCN, GCNwithIntraAndInterMatrix
-from Model import CountMeanOfFeature, CountMeanAndCovOfFeature, CountMeanOfFeatureInCluster
+from models.GraphConvolutionNetwork import GCN, GCNwithIntraAndInterMatrix
+from models.Model import CountMeanOfFeature, CountMeanAndCovOfFeature, CountMeanOfFeatureInCluster
 
 class Backbone_VGG(nn.Module):
     def __init__(self, useIntraGCN=True, useInterGCN=True, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=False):

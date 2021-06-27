@@ -6,8 +6,8 @@ import copy
 import numpy as np
 from collections import namedtuple
 
-from GraphConvolutionNetwork import GCN, GCNwithIntraAndInterMatrix
-from Model import CountMeanOfFeature, CountMeanAndCovOfFeature, CountMeanOfFeatureInCluster
+from models.GraphConvolutionNetwork import GCN, GCNwithIntraAndInterMatrix
+from models.Model import CountMeanOfFeature, CountMeanAndCovOfFeature, CountMeanOfFeatureInCluster
 
 # Support: ['IR_18', 'IR_50', 'IR_101', 'IR_152', 'IR_SE_50', 'IR_SE_101', 'IR_SE_152']
 
@@ -139,7 +139,7 @@ def init_weights(m):
     elif classname.find('Linear') != -1:
         nn.init.xavier_normal_(m.weight)
         nn.init.zeros_(m.bias)
-
+'''
 class Backbone(nn.Module):
     def __init__(self, numOfLayer, useIntraGCN=True, useInterGCN=True, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=False, class_num = 7):   
 
@@ -373,7 +373,8 @@ class Backbone(nn.Module):
         loc_feature = loc_feature.view(batch_size, -1) # batch_size * 320 
 
         return loc_feature
-class Backbone_old(nn.Module):
+    '''
+class Backbone(nn.Module):
     def __init__(self, numOfLayer, useIntraGCN=True, useInterGCN=True, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=False, class_num = 7):   
 
         super(Backbone, self).__init__()
@@ -595,7 +596,7 @@ class Backbone_old(nn.Module):
         return loc_feature
 
 class Backbone_onlyGlobal(nn.Module):
-    def __init__(self,numOfLayer):
+    def __init__(self,numOfLayer, class_num):
 
         super(Backbone_onlyGlobal, self).__init__()
 
@@ -613,7 +614,7 @@ class Backbone_onlyGlobal(nn.Module):
                                        nn.ReLU(),
                                        nn.AdaptiveAvgPool2d((1,1)))
 
-        self.fc = nn.Linear(64, 7)
+        self.fc = nn.Linear(64, class_num)
         self.fc.apply(init_weights)
         
     def classify(self, imgs, locations):
@@ -671,16 +672,16 @@ class Backbone_onlyGlobal(nn.Module):
                             ]
         return parameter_list
 
-def IR(numOfLayer, useIntraGCN, useInterGCN, useRandomMatrix, useAllOneMatrix, useCov, useCluster, class_num):
+def IR_GCN(numOfLayer, useIntraGCN, useInterGCN, useRandomMatrix, useAllOneMatrix, useCov, useCluster, class_num):
     """Constructs a ir-18/ir-50 model."""
 
     model = Backbone(numOfLayer, useIntraGCN, useInterGCN, useRandomMatrix, useAllOneMatrix, useCov, useCluster, class_num)
 
     return model
 
-def IR_onlyGlobal(numOfLayer):
+def IR_onlyGlobal_GCN(numOfLayer):
     """Constructs a ir-18/ir-50 model."""
 
-    model = Backbone_onlyGlobal(numOfLayer)
+    model = Backbone_onlyGlobal(numOfLayer, class_num)
 
     return model

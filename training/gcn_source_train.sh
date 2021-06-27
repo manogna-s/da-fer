@@ -1,6 +1,6 @@
 Log_Name='raf2aisin_res50'
 Resume_Model=None
-OutputPath='.'
+OutputPath='exp_logs'
 GPU_ID=0    
 Backbone='ResNet50'
 useAFN='False'
@@ -21,15 +21,15 @@ weight_decay=0.0001
 isTest='False'
 showFeature='False'
 class_num=2
-useIntraGCN='False'
-useInterGCN='False'
+useIntraGCN='True'
+useInterGCN='True'
 useLocalFeature='True'
 useRandomMatrix='False'
 useAllOneMatrix='False'
 useCov='False'
 useCluster='False'
      
-OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 CUDA_VISIBLE_DEVICES=${GPU_ID} python3 TrainOnSourceDomain.py \
+OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 CUDA_LAUNCH_BLOCKING=1 CUDA_VISIBLE_DEVICES=${GPU_ID} python3 TrainOnSourceDomain.py \
 --Log_Name ${Log_Name} \
 --OutputPath ${OutputPath} \
 --pretrained ${Resume_Model} \

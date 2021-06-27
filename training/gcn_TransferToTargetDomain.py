@@ -12,8 +12,8 @@ import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 
-from Loss import Entropy, DANN, CDAN, HAFN, SAFN, MME
-from Utils import *
+from utils.Loss import Entropy, DANN, CDAN, HAFN, SAFN
+from utils.Utils import *
 
 parser = argparse.ArgumentParser(description='Domain adaptation for Expression Classification')
 
@@ -24,7 +24,7 @@ parser.add_argument('--pretrained', type=str, help='pretrained', default='None')
 parser.add_argument('--dev', default='0', type=str, help='CUDA_VISIBLE_DEVICES')
 
 parser.add_argument('--use_dan', type=str2bool, default=False, help='whether to use DAN Loss')
-parser.add_argument('--dan_method', type=str, default='CDAN-E', choices=['CDAN', 'CDAN-E', 'DANN','MME'])
+parser.add_argument('--dan_method', type=str, default='CDAN-E', choices=['CDAN', 'CDAN-E', 'DANN'])
 
 parser.add_argument('--use_afn', type=str2bool, default=False, help='whether to use AFN Loss')
 parser.add_argument('--afn_method', type=str, default='SAFN', choices=['HAFN', 'SAFN'])

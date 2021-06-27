@@ -1,7 +1,7 @@
 Log_Name='raf2aisin_res50'
 ##Resume_Model='ResNet50_CropNet_withoutAFN_trainOnSourceDomain_RAFtoCK+.pkl'
 Resume_Model=None
-OutputPath='.'
+OutputPath='exp_logs/'
 GPU_ID=1
 Backbone='ResNet50'
 useAFN='False'
@@ -10,7 +10,7 @@ radius=25
 deltaRadius=1
 weight_L2norm=0.05
 useDAN='True'
-methodOfDAN='MME'
+methodOfDAN='DANN'
 faceScale=112
 sourceDataset='RAF'
 targetDataset='AISIN'
@@ -33,7 +33,7 @@ useAllOneMatrix='False'
 useCov='False'
 useCluster='False'
 
-OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 CUDA_VISIBLE_DEVICES=${GPU_ID} python3 TransferToTargetDomain.py \
+OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 CUDA_VISIBLE_DEVICES=${GPU_ID} python3 gcn_TransferToTargetDomain.py \
 --log ${Log_Name} \
 --out ${OutputPath} \
 --net ${Backbone} \

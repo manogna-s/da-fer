@@ -152,7 +152,7 @@ def Build_Backbone(args):
         print('Resume Model: {}'.format(args.pretrained))
         checkpoint = torch.load(args.pretrained, map_location='cpu')
 
-        model.load_state_dict(checkpoint, strict=True)
+        model.load_state_dict(checkpoint, strict=False)
     else:
         print('No Resume Model')
 
@@ -187,7 +187,7 @@ def BulidModel(args):
         print('Resume Model: {}'.format(args.pretrained))
         checkpoint = torch.load(args.pretrained, map_location='cpu')
 
-        model.load_state_dict(checkpoint, strict=True)
+        model.load_state_dict(checkpoint, strict=False)
     else:
         print('No Resume Model')
     
@@ -216,7 +216,7 @@ def BulidAdversarialNetwork(args, model_output_num, class_num=7):
 
     return random_layer, ad_net
 
-def BulidDataloader(args, flag1='train', flag2='source'):
+def BulidDataloader(args, flag1='train', flag2='source', balanced=-1):
     """Bulid data loader."""
 
     assert flag1 in ['train', 'test'], 'Function BuildDataloader : function parameter flag1 wrong.'
@@ -260,7 +260,7 @@ def BulidDataloader(args, flag1='train', flag2='source'):
                     data_bboxs.append(bbox)
                     data_landmarks.append(landmark)
             
-        if flag2 == 'target':
+        if flag2 == 'target' and balanced == -1:
             list_patition_label = pd.read_csv(dataPath_prefix+'/%s/lists/image_list.txt'%(args.target), header=None, delim_whitespace=True)
             list_patition_label = np.array(list_patition_label)
             for index in range(list_patition_label.shape[0]):
@@ -281,7 +281,32 @@ def BulidDataloader(args, flag1='train', flag2='source'):
                     data_labels.append(list_patition_label[index,1])
                     data_bboxs.append((0,0,ori_img_w,ori_img_h))
                     data_landmarks.append(landmark)
-                        
+
+        if flag2 == 'target' and balanced > 0:
+            list_patition_label = pd.read_csv(dataPath_prefix+'/%s/lists/image_list.txt'%(args.target), header=None, delim_whitespace=True)
+            list_patition_label = np.array(list_patition_label)
+            n_class = {0:0, 1:0}
+
+            for index in range(list_patition_label.shape[0]):
+
+                    if list_patition_label[index,0][:5] == "train":
+                    #if not os.path.exists(dataPath_prefix+'/%s/boundingbox/'%(args.target)+list_patition_label[index,0][:-3]+'txt'):
+                        #continue
+
+                        if not os.path.exists(dataPath_prefix+'/%s/landmarks_5/'%(args.target)+list_patition_label[index,0][:-3]+'txt'):
+                        #print(list_patition_label[index,0][:-3]+'txt')
+                            continue
+                        img = Image.open(dataPath_prefix + '/%s/images/'%(args.target)+list_patition_label[index,0]).convert('RGB')
+                        ori_img_w, ori_img_h = img.size
+                        #bbox = np.loadtxt(dataPath_prefix+'/%s/boundingbox/'%(args.target)+list_patition_label[index,0][:-3]+'txt').astype(np.int)
+                        landmark = np.loadtxt(dataPath_prefix+'/%s/landmarks_5/'%(args.target)+list_patition_label[index,0][:-3]+'txt').astype(np.int)
+                        label = list_patition_label[index,1]
+                        if n_class[label]<balanced:
+                            data_imgs.append(dataPath_prefix+'/%s/images/'%(args.target)+list_patition_label[index,0])
+                            data_labels.append(label)
+                            data_bboxs.append((0,0,ori_img_w,ori_img_h))
+                            data_landmarks.append(landmark)
+                            n_class[label]+=1
     elif flag1 == 'test':
         if flag2 =='source':
             list_patition_label = pd.read_csv(dataPath_prefix+'/%s/lists/image_list.txt'%(args.source), header=None, delim_whitespace=True)
@@ -508,7 +533,7 @@ def Initialize_Mean_Cluster(args, model, useClassify=True):
     # Target Cluster of Mean
     Feature = []
     EndTime = time.time()
-    target_data_loader = BulidDataloader(args, flag1='train', flag2='target')
+    target_data_loader = BulidDataloader(args, flag1='train', flag2='target', balanced=args.num_balanced)
 
     for step, (input, landmark, label) in enumerate(target_data_loader):
         input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()

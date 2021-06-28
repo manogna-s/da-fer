@@ -1,16 +1,16 @@
 import torch
 
-from ..models.ResNet_GCN import IR_GCN, IR_onlyGlobal_GCN
+from models.ResNet_GCN import IR_GCN, IR_onlyGlobal_GCN
 
 numOfLayer = 50 # [18, 50]
 
 
-model = IR_GCN(numOfLayer=numOfLayer, useIntraGCN=True, useInterGCN=True, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=True)
+model = IR_GCN(numOfLayer=numOfLayer, useIntraGCN=True, useInterGCN=True, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=True, class_num=2)
 # model = IR_onlyGlobal(numOfLayer=numOfLayer)
 
 model_dict = model.state_dict()
-checkpoint = torch.load('./msceleb_ckpts/backbone_ir50_ms1m_epoch120.pth') if numOfLayer == 50 else \
-             torch.load('../msceleb_ckpts/backbone_IR_18_HeadFC_Softmax_112_512_1.0_Epoch_156_lfw_112_0.994_X4_112_0.990_agedb_30_112_0.949.pth')
+checkpoint = torch.load('./pretrained_models/msceleb_ckpts/backbone_ir50_ms1m_epoch120.pth') if numOfLayer == 50 else \
+             torch.load('./pretrained_models/msceleb_ckpts/backbone_IR_18_HeadFC_Softmax_112_512_1.0_Epoch_156_lfw_112_0.994_X4_112_0.990_agedb_30_112_0.949.pth')
 
 indexToLayer = {'0':'layer1.0.', '1':'layer1.1.', '2':'layer1.2.', \
                 '3':'layer2.0.', '4':'layer2.1.', '5':'layer2.2.', '6':'layer2.3.',\
@@ -32,6 +32,7 @@ for key, value in checkpoint.items():
     else:
         newCheckpoint[key] = value
 
+
 for key, value in model_dict.items():
     subStr = key.split('.',2)
     if subStr[0]=='fc' or subStr[0]=='loc_fc' or \
@@ -43,9 +44,9 @@ for key, value in model_dict.items():
 
 model.load_state_dict(newCheckpoint)
 if numOfLayer == 50:
-    torch.save(model.state_dict(), './ckpts/ir50_ms1m_112_CropNet_GCNwithIntraMatrixAndInterMatrix_useCluster.pkl')
+    torch.save(model.state_dict(), './pretrained_models/ckpts/ir50_ms1m_112_CropNet_GCN_useCluster.pkl')
     # torch.save(model.state_dict(), './preTrainedModel/ir50_ms1m_112_onlyGlobal.pkl')
     
 elif numOfLayer == 18:
-    torch.save(model.state_dict(), './ckpts/ir18_lfw_112_CropNet_GCNwithIntraMatrixAndInterMatrix_useCluster.pkl')
+    torch.save(model.state_dict(), './pretrained_models/ckpts/ir18_lfw_112_CropNet_GCNwithIntraMatrixAndInterMatrix_useCluster.pkl')
     # torch.save(model.state_dict(), './preTrainedModel/ir18_lfw_112_onlyGlobal.pkl')

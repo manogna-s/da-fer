@@ -42,6 +42,7 @@ parser.add_argument('--target', type=str, default='CK+', choices=['RAF', 'CK+', 
 parser.add_argument('--train_batch', type=int, default=64, help='input batch size for training (default: 64)')
 parser.add_argument('--test_batch', type=int, default=64, help='input batch size for testing (default: 64)')
 parser.add_argument('--useMultiDatasets', type=str2bool, default=False, help='whether to use MultiDataset')
+parser.add_argument('--num_unlabeled', type=int, default=-1, help='number of unlabeled samples (default: -1 == all samples)')
 
 parser.add_argument('--lr', type=float, default=0.01)
 parser.add_argument('--epochs', type=int, default=10,help='number of epochs to train (default: 10)')
@@ -106,7 +107,7 @@ def Train(args, model, train_dataloader, optimizer, epoch, writer):
 
     end = time.time()
     for step, (input, landmark, label) in enumerate(train_dataloader):
-
+        print(f'iter: {step}')
         input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
         data_time.update(time.time()-end)
 
@@ -291,12 +292,13 @@ def main():
     # Parse Argument
     args = parser.parse_args()
     torch.manual_seed(args.seed)
-
+    
     # Experiment Information
     print('log : %s' % args.Log_Name, 'out-pth %s' % args.OutputPath, 'net: %s' % args.net, 'pretrained %s' % args.pretrained, 'dev %s' % args.GPU_ID )
 
     print('Use {} * {} Image'.format(args.face_scale, args.face_scale), 'source %s' % args.source, 'target %s' % args.target, 'train bs %d' % args.train_batch,'test bs %d' % args.test_batch)
 
+    print('Using %d unlabeled target samples', args.num_unlabeled)
     if args.showFeature:
         print('Show Visualization Result of Feature.')
 
@@ -347,7 +349,10 @@ def main():
     # Bulid Dataloder
     print("Building Train and Test Dataloader...")
     train_source_dataloader = BulidDataloader(args, flag1='train', flag2='source')
-    train_target_dataloader = BulidDataloader(args, flag1='train', flag2='target')
+    if args.num_unlabeled > 0:
+        train_target_dataloader = BulidDataloader(args, flag1='train', flag2='target', balanced=args.num_unlabeled)
+    else:
+        train_target_dataloader = BulidDataloader(args, flag1='train', flag2='target')
     test_source_dataloader = BulidDataloader(args, flag1='test', flag2='source')
     test_target_dataloader = BulidDataloader(args, flag1='test', flag2='target')
     print('Done!')

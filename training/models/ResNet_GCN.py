@@ -417,9 +417,8 @@ class Backbone(nn.Module):
         #self.GCN = GCN(64, 128, 64)
         self.GCN = GCNwithIntraAndInterMatrix(64, 128, 64, useIntraGCN=useIntraGCN, useInterGCN=useInterGCN, useRandomMatrix=useRandomMatrix, useAllOneMatrix=useAllOneMatrix)
 
-        self.SourceMean = (CountMeanAndCovOfFeature(64+320) if useCov else CountMeanOfFeature(64+320)) if not useCluster else CountMeanOfFeatureInCluster(64+320)
-        self.TargetMean = (CountMeanAndCovOfFeature(64+320) if useCov else CountMeanOfFeature(64+320)) if not useCluster else CountMeanOfFeatureInCluster(64+320)
- 
+        self.SourceMean = (CountMeanAndCovOfFeature(64+320) if useCov else CountMeanOfFeature(64+320)) if not useCluster else CountMeanOfFeatureInCluster(64+320, class_num=class_num)
+        self.TargetMean = (CountMeanAndCovOfFeature(64+320) if useCov else CountMeanOfFeature(64+320)) if not useCluster else CountMeanOfFeatureInCluster(64+320, class_num=class_num)
         self.SourceBN = BatchNorm1d(64+320)
         self.TargetBN = BatchNorm1d(64+320)
 
@@ -439,7 +438,7 @@ class Backbone(nn.Module):
         # GCN
         if self.training:
             feature = self.SourceMean(feature)
-        feature = torch.cat( ( self.SourceBN(feature), self.TargetBN(self.TargetMean.getSample(feature.detach())) ), 1) # Batch * (64+320 + 64+320)
+        feature = torch.cat( ( self.SourceBN(feature), self.TargetBN(self.TargetMean.getSample(feature.clone().detach())) ), 1) # Batch * (64+320 + 64+320)
         feature = self.GCN(feature.view(feature.size(0), 12, -1))                                                       # Batch * 12 * 64
 
         feature = feature.view(feature.size(0), -1).narrow(1, 0, 64+320) # Batch * (64+320)

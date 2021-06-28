@@ -1,6 +1,6 @@
-Log_Name='raf2aisin_res50'
-Resume_Model=None
-OutputPath='exp_logs'
+Log_Name='gcn_raf_res50'
+Resume_Model='./pretrained_models/ckpts/ir50_ms1m_112_CropNet_GCN_useCluster.pkl'
+OutputPath='exp_logs/gcn_source'
 GPU_ID=0    
 Backbone='ResNet50'
 useAFN='False'
@@ -11,8 +11,9 @@ weight_L2norm=0.05
 faceScale=112
 sourceDataset='RAF'
 targetDataset='AISIN'
-train_batch_size=32
-test_batch_size=32
+train_batch_size=16
+test_batch_size=16
+num_unlabeled=700
 useMultiDatasets='False'
 epochs=60
 lr=0.0001
@@ -27,7 +28,7 @@ useLocalFeature='True'
 useRandomMatrix='False'
 useAllOneMatrix='False'
 useCov='False'
-useCluster='False'
+useCluster='True'
      
 OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 CUDA_LAUNCH_BLOCKING=1 CUDA_VISIBLE_DEVICES=${GPU_ID} python3 TrainOnSourceDomain.py \
 --Log_Name ${Log_Name} \
@@ -53,6 +54,7 @@ OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 CUDA_LAUNCH_BLOCKING=1 CUDA_VISIBLE_DEVICE
 --isTest ${isTest} \
 --showFeature ${showFeature} \
 --class_num ${class_num} \
+--num_unlabeled ${num_unlabeled} \
 --intra_gcn ${useIntraGCN} \
 --inter_gcn ${useInterGCN} \
 --local_feat ${useLocalFeature} \

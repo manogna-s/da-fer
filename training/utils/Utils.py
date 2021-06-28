@@ -30,7 +30,7 @@ import torchvision.transforms as transforms
 from utils.Dataset import MyDataset
 from models.VGG import VGG, VGG_onlyGlobal
 from models.ResNet_GCN import IR_GCN, IR_onlyGlobal_GCN
-from models.ResNet import IR, IR_onlyGlobal
+from models.ResNet import IR_local, IR_global
 from models.MobileNet import MobileNetV2, MobileNetV2_onlyGlobal
 from models.AdversarialNetwork import RandomLayer, AdversarialNetwork, calc_coeff
 
@@ -139,7 +139,7 @@ def Compute_Accuracy(args, pred, target, acc, prec, recall):
 
 def Build_Backbone(args):
     if args.local_feat:
-        if args.net == 'ResNet 50':
+        if args.net == 'ResNet50':
             model = IR_local(50,args.class_num)
         else:
             print('Add the model you want :P')
@@ -148,6 +148,19 @@ def Build_Backbone(args):
             model = IR_global(50,args.class_num)
         else:
             print('Add the model you want :P')
+    if args.pretrained != 'None':
+        print('Resume Model: {}'.format(args.pretrained))
+        checkpoint = torch.load(args.pretrained, map_location='cpu')
+
+        model.load_state_dict(checkpoint, strict=True)
+    else:
+        print('No Resume Model')
+
+    if torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model)
+
+    model.cuda()
+    return model
 
 def BulidModel(args):
     """Bulid Model."""

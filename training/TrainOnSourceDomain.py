@@ -7,7 +7,6 @@ import argparse
 import subprocess
 import numpy as np
 import pandas as pd
-#sys.path.append("/home/megh/projects/fer/CD-FER-Benchmark/AGRA")
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -169,7 +168,7 @@ def Train(args, model, train_dataloader, optimizer, epoch, writer):
 
     print(LoggerInfo)
 
-def Test(args, model, test_source_dataloader, test_target_dataloader, Best_Recall):
+def Test(args, model, test_source_dataloader, test_target_dataloader, Best_Recall, split='test'):
     """Test."""
 
     model.eval()
@@ -183,7 +182,7 @@ def Test(args, model, test_source_dataloader, test_target_dataloader, Best_Recal
     loss, global_cls_loss, local_cls_loss, afn_loss, data_time, batch_time =  AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
 
     end = time.time()
-    print("Starting Source Data Testing")
+    print(f"Starting {split} Data Testing")
     for step, (input, landmark, label) in enumerate(iter_source_dataloader):
         input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
         data_time.update(time.time()-end)
@@ -214,10 +213,10 @@ def Test(args, model, test_source_dataloader, test_target_dataloader, Best_Recal
     AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
 
     LoggerInfo = '''
-    Test Source: 
+    {0} Source: 
     Data Time {data_time.sum:.4f} ({data_time.avg:.4f})
     Batch Time {batch_time.sum:.4f} ({batch_time.avg:.4f})
-    Learning Rate {0}\n'''.format(args.lr, data_time=data_time, batch_time=batch_time)
+    Learning Rate {1}\n'''.format(split, args.lr, data_time=data_time, batch_time=batch_time)
 
     LoggerInfo+=AccuracyInfo
 
@@ -272,10 +271,10 @@ def Test(args, model, test_source_dataloader, test_target_dataloader, Best_Recal
     AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
 
     LoggerInfo = '''
-    Test Target: 
+    {0} Target: 
     Data Time {data_time.sum:.4f} ({data_time.avg:.4f})
     Batch Time {batch_time.sum:.4f} ({batch_time.avg:.4f})
-    Learning Rate {0}\n'''.format(args.lr, data_time=data_time, batch_time=batch_time)
+    Learning Rate {1}\n'''.format(split, args.lr, data_time=data_time, batch_time=batch_time)
 
     LoggerInfo+=AccuracyInfo
 
@@ -322,10 +321,9 @@ def main():
     else:
         print('Use global feature and local feature.')
 
-        if args.intra_gcn:
-            print('Use Intra GCN.')
-        if args.inter_gcn:
-            print('Use Inter GCN.')
+    if args.intra_gcn and args.inter_gcn:
+        print('Use Intra GCN.')
+        print('Use Inter GCN.')
 
         if args.rand_mat and args.all1_mat:
             print('Wrong : Use RandomMatrix and AllOneMatrix both!')
@@ -357,14 +355,19 @@ def main():
     print('================================================')
 
     # Bulid Model
-    print('Building Model...')
-    model = BulidModel(args)
-    print('Done!')
-
+    if args.inter_gcn and args.intra_gcn:
+        print('Building Model...')
+        model = BulidModel(args)
+        print('Done!')
+    else:
+        print('Building Model...')
+        model = Build_Backbone(args)
+        print('Done!')
+    
     print('================================================')
 
     # Init Mean
-    if args.local_feat and not args.isTest: 
+    if args.local_feat and args.inter_gcn and args.intra_gcn and not args.isTest: 
         if args.use_cov:
             print('Init Mean and Cov...')
             Initialize_Mean_Cov(args, model, True)
@@ -409,7 +412,8 @@ def main():
                 torch.cuda.empty_cache()
             Train(args, model, train_source_dataloader, optimizer, epoch, writer)
 
-        Best_Recall = Test(args, model, test_source_dataloader, test_target_dataloader, Best_Recall)
+        Best_train_Recall = Test(args, model, train_source_dataloader, train_target_dataloader, Best_Recall, split='train')
+        Best_Recall = Test(args, model, test_source_dataloader, test_target_dataloader, Best_Recall, split='test')
 
         torch.cuda.empty_cache()
 

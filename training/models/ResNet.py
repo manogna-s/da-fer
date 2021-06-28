@@ -141,12 +141,10 @@ def init_weights(m):
         nn.init.zeros_(m.bias)
 
 class Backbone(nn.Module):
-    def __init__(self, numOfLayer, useIntraGCN=True, useInterGCN=True, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=False, class_num = 7):   
+    def __init__(self, numOfLayer, class_num = 7):   
 
         super(Backbone, self).__init__()
 
-        self.useIntraGCN = useIntraGCN
-        self.useInterGCN = useInterGCN
         unit_module = bottleneck_IR
         
         self.input_layer = Sequential(Conv2d(in_channels=3, out_channels=64, kernel_size=(3, 3), stride=(1,1), padding=(1,1), bias=False),BatchNorm2d(64), PReLU(64))
@@ -171,24 +169,13 @@ class Backbone(nn.Module):
                                 bottleneck.stride))
         cropNet_modules+=[nn.Conv2d(in_channels=512, out_channels=64, kernel_size=(3,3), stride=(1,1), padding=(1,1)), nn.ReLU()]
         self.Crop_Net = nn.ModuleList([ copy.deepcopy(nn.Sequential(*cropNet_modules)) for i in range(5) ])
-
+        self.GAP = nn.AdaptiveAvgPool2d((1,1))
         self.fc = nn.Linear(64 + 320, class_num)
         self.fc.apply(init_weights)
 
         self.loc_fc = nn.Linear(320, class_num)
         self.loc_fc.apply(init_weights)
 
-        self.GAP = nn.AdaptiveAvgPool2d((1,1))
-
-        if self.useIntraGCN and self.useInterGCN:
-        #self.GCN = GCN(64, 128, 64)
-            self.GCN = GCNwithIntraAndInterMatrix(64, 128, 64, useIntraGCN=useIntraGCN, useInterGCN=useInterGCN, useRandomMatrix=useRandomMatrix, useAllOneMatrix=useAllOneMatrix)
-
-            self.SourceMean = (CountMeanAndCovOfFeature(64+320) if useCov else CountMeanOfFeature(64+320)) if not useCluster else CountMeanOfFeatureInCluster(64+320)
-            self.TargetMean = (CountMeanAndCovOfFeature(64+320) if useCov else CountMeanOfFeature(64+320)) if not useCluster else CountMeanOfFeatureInCluster(64+320)
- 
-            self.SourceBN = BatchNorm1d(64+320)
-            self.TargetBN = BatchNorm1d(64+320)
 
     def classify(self, imgs, locations):
 
@@ -202,13 +189,6 @@ class Backbone(nn.Module):
         global_feature = self.output_layer(featureMap4).view(featureMap.size(0), -1) # Batch * 64
         loc_feature = self.crop_featureMap(featureMap2, locations)                   # Batch * 320
         feature = torch.cat((global_feature, loc_feature), 1)                        # Batch * (64+320)    
-        
-        # GCN
-        if self.useIntraGCN and self.useInterGCN:
-            if self.training:
-                feature = self.SourceMean(feature)
-            feature = torch.cat( ( self.SourceBN(feature), self.TargetBN(self.TargetMean.getSample(feature.detach())) ), 1) # Batch * (64+320 + 64+320)
-            feature = self.GCN(feature.view(feature.size(0), 12, -1))                                                       # Batch * 12 * 64
 
         feature = feature.view(feature.size(0), -1).narrow(1, 0, 64+320) # Batch * (64+320)
         loc_feature = feature.narrow(1, 64, 320)                         # Batch * 320
@@ -217,7 +197,7 @@ class Backbone(nn.Module):
         loc_pred = self.loc_fc(loc_feature)  # Batch * class_num
 
         return feature, pred, loc_pred
-
+    '''
     def transfer(self, imgs, locations, domain='Target'):
 
         assert domain in ['Source', 'Target'], 'Parameter domain should be Source or Target.'
@@ -306,22 +286,16 @@ class Backbone(nn.Module):
         loc_pred = self.loc_fc(loc_feature) # Batch * class_num
 
         return feature, pred, loc_pred
-
-    def forward(self, imgs, locations, flag=True, domain='Target'):
+    '''
+    def forward(self, imgs, locations):
         
-        if flag:
-            return self.classify(imgs, locations)
-
-        return self.transfer(imgs, locations, domain)
+        return self.classify(imgs, locations)
 
     def output_num(self):
         return 64*6
 
-    def get_parameters(self):
-        if self.useIntraGCN and self.useInterGCN:
-            parameter_list = [  {"params":self.input_layer.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer1.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer2.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer3.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer4.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.output_layer.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.loc_fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.Crop_Net.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.GCN.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.SourceBN.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.TargetBN.parameters(), "lr_mult":10, 'decay_mult':2}]
-        else:
-            parameter_list = [  {"params":self.input_layer.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer1.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer2.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer3.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer4.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.output_layer.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.loc_fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.Crop_Net.parameters(), "lr_mult":10, 'decay_mult':2}]
+    def get_parameters(self):    
+        parameter_list = [  {"params":self.input_layer.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer1.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer2.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer3.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer4.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.output_layer.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.loc_fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.Crop_Net.parameters(), "lr_mult":10, 'decay_mult':2}]
         return parameter_list
 
     def crop_featureMap(self, featureMap, locations):
@@ -373,6 +347,7 @@ class Backbone(nn.Module):
         loc_feature = loc_feature.view(batch_size, -1) # batch_size * 320 
 
         return loc_feature
+'''
 class Backbone_old(nn.Module):
     def __init__(self, numOfLayer, useIntraGCN=True, useInterGCN=True, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=False, class_num = 7):   
 
@@ -582,20 +557,11 @@ class Backbone_old(nn.Module):
             feature = torch.stack(grid_list, dim=0)
             feature_list.append(feature)
  
-        # feature list: 5 * [ batch_size * channel * 3 * 3 ]
-        output_list = []
-        for i in range(5):
-            output = self.Crop_Net[i](feature_list[i])
-            output = self.GAP(output)
-            output_list.append(output)
-
-        loc_feature = torch.stack(output_list, dim=1)  # batch_size * 5 * 64 * 1 * 1
-        loc_feature = loc_feature.view(batch_size, -1) # batch_size * 320 
-
-        return loc_feature
+        # feature list: 5 * [ batch_size * c        return loc_feature
+'''
 
 class Backbone_onlyGlobal(nn.Module):
-    def __init__(self,numOfLayer):
+    def __init__(self,numOfLayer, class_num):
 
         super(Backbone_onlyGlobal, self).__init__()
 
@@ -613,7 +579,7 @@ class Backbone_onlyGlobal(nn.Module):
                                        nn.ReLU(),
                                        nn.AdaptiveAvgPool2d((1,1)))
 
-        self.fc = nn.Linear(64, 7)
+        self.fc = nn.Linear(64, class_num)
         self.fc.apply(init_weights)
         
     def classify(self, imgs, locations):
@@ -632,30 +598,10 @@ class Backbone_onlyGlobal(nn.Module):
 
         return feature, pred, loc_pred
 
-    def transfer(self, imgs, locations, domain='Target'):
-
-        assert domain in ['Source', 'Target'], 'Parameter domain should be Source or Target.'
-
-        featureMap = self.input_layer(imgs)
-
-        featureMap1 = self.layer1(featureMap)  # Batch * 64 * 56 * 56
-        featureMap2 = self.layer2(featureMap1) # Batch * 128 * 28 * 28
-        featureMap3 = self.layer3(featureMap2) # Batch * 256 * 14 * 14
-        featureMap4 = self.layer4(featureMap3) # Batch * 512 * 7 * 7
-
-        feature = self.output_layer(featureMap4).view(featureMap.size(0), -1)  # Batch * 64
-
-        pred = self.fc(feature)  # Batch * 7
-        loc_pred = None
-
-        return feature, pred, loc_pred
-
-    def forward(self, imgs, locations, flag=True, domain='Target'):
+    def forward(self, imgs, locations):
         
-        if flag:
-            return self.classify(imgs, locations)
+        return self.classify(imgs, locations)
 
-        return self.transfer(imgs, locations, domain)
 
     def output_num(self):
         return 64
@@ -671,16 +617,16 @@ class Backbone_onlyGlobal(nn.Module):
                             ]
         return parameter_list
 
-def IR(numOfLayer, useIntraGCN, useInterGCN, useRandomMatrix, useAllOneMatrix, useCov, useCluster, class_num):
+def IR_local(numOfLayer, class_num):
     """Constructs a ir-18/ir-50 model."""
 
-    model = Backbone(numOfLayer, useIntraGCN, useInterGCN, useRandomMatrix, useAllOneMatrix, useCov, useCluster, class_num)
+    model = Backbone(numOfLayer, class_num)
 
     return model
 
-def IR_onlyGlobal(numOfLayer):
+def IR_global(numOfLayer, class_num):
     """Constructs a ir-18/ir-50 model."""
 
-    model = Backbone_onlyGlobal(numOfLayer)
+    model = Backbone_onlyGlobal(numOfLayer, class_num)
 
     return model

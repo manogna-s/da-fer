@@ -33,7 +33,7 @@ parser.add_argument('--dr', type=float, default=1.0, help='radius of SAFN (defau
 parser.add_argument('--w_l2', type=float, default=0.05, help='weight L2 norm of AFN (default: 0.05)')
 
 parser.add_argument('--face_scale', type=int, default=112, help='Scale of face (default: 112)')
-parser.add_argument('--source', type=str, default='RAF', choices=['RAF', 'AFED', 'MMI'])
+parser.add_argument('--source', type=str, default='RAF', choices=['RAF', 'AFED', 'MMI', 'RAF_7class'])
 parser.add_argument('--target', type=str, default='CK+', choices=['RAF', 'CK+', 'JAFFE', 'MMI', 'Oulu-CASIA', 'SFEW', 'FER2013', 'ExpW', 'AFED', 'WFED','AISIN'])
 parser.add_argument('--train_batch', type=int, default=64, help='input batch size for training (default: 64)')
 parser.add_argument('--test_batch', type=int, default=64, help='input batch size for testing (default: 64)')
@@ -41,7 +41,8 @@ parser.add_argument('--multiple_data', type=str2bool, default=False, help='wheth
 parser.add_argument('--num_unlabeled', type=int, default=-1, help='number of unlabeled samples (default: -1 == all samples)')
 
 parser.add_argument('--lr', type=float, default=0.0001)
-parser.add_argument('--lr_ad', type=float, default=0.01)
+parser.add_argument('--lr_ad', type=float, default=0.001)
+parser.add_argument('--lamda', type=float, default=0.5)
 
 parser.add_argument('--epochs', type=int, default=10, help='number of epochs to train (default: 10)')
 parser.add_argument('--momentum', type=float, default=0.5,  help='SGD momentum (default: 0.5)')
@@ -137,7 +138,7 @@ def Train(args, model, ad_net, random_layer, train_source_dataloader, train_targ
             elif args.dan_method == 'CDAN':
                 dan_loss_ = CDAN([feature, softmax_output], ad_net, None, None, random_layer)
             elif args.dan_method == 'DANN':
-                dan_loss_ = DANN(feature, ad_net)
+                dan_loss_ = args.lamda * DANN(feature, ad_net)
         else:
             dan_loss_ = 0
 
@@ -208,11 +209,9 @@ def Train(args, model, ad_net, random_layer, train_source_dataloader, train_targ
         writer.add_scalar('AdversarialNetwork_Accuracy', num_ADNet/(2.0*args.train_batch*num_iter), epoch)
     
     LoggerInfo = '''
-    [Tain]: 
+    [Train on Source and unlabeled target]: 
     Epoch {0}
-    Data Time {data_time.sum:.4f} ({data_time.avg:.4f})
-    Batch Time {batch_time.sum:.4f} ({batch_time.avg:.4f})
-    Learning Rate {1} Learning Rate(AdversarialNet) {2}\n'''.format(epoch, lr, lr_ad if args.use_dan else 0, data_time=data_time, batch_time=batch_time)
+    Learning Rate {1} Learning Rate(AdversarialNet) {2}\n'''.format(epoch, lr, lr_ad if args.use_dan else 0)
 
     LoggerInfo+=AccuracyInfo
 
@@ -221,28 +220,29 @@ def Train(args, model, ad_net, random_layer, train_source_dataloader, train_targ
                                                                                 
     print(LoggerInfo)
 
-def Test(args, model, test_source_dataloader, test_target_dataloader, Best_Accuracy, Best_Recall, epoch, writer):
-    """Test."""
 
+def Test_dataloader(args, model, dataloader, Best_Accuracy, Best_Recall, domain = 'Target', split = 'test'):
+    """Test."""
+    
+    print(f'{domain} {split}')
     model.eval()
     torch.autograd.set_detect_anomaly(True)
 
-    iter_source_dataloader = iter(test_source_dataloader)
-    iter_target_dataloader = iter(test_target_dataloader)
+    iter_dataloader = iter(dataloader)
 
     # Test on Source Domain
     acc, prec, recall = [AverageMeter() for i in range(args.class_num)], [AverageMeter() for i in range(args.class_num)], [AverageMeter() for i in range(args.class_num)]
     loss, data_time, batch_time =  AverageMeter(), AverageMeter(), AverageMeter()
 
     end = time.time()
-    for batch_index, (input, landmark, target) in enumerate(iter_source_dataloader):
+    for batch_index, (input, landmark, target) in enumerate(iter_dataloader):
         data_time.update(time.time()-end)
 
         input, landmark, target = input.cuda(), landmark.cuda(), target.cuda()
         
         with torch.no_grad():
             end = time.time()
-            feature, output, loc_output = model(input, landmark, False, 'Source')
+            feature, output, loc_output = model(input, landmark, False, domain=domain)
             batch_time.update(time.time()-end)
         
         loss_ = nn.CrossEntropyLoss()(output, target)
@@ -256,82 +256,32 @@ def Test(args, model, test_source_dataloader, test_target_dataloader, Best_Accur
         end = time.time()
 
     AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
-
-    writer.add_scalar('Test_Recall_SourceDomain', recall_avg, epoch)
-    writer.add_scalar('Test_Accuracy_SourceDomain', acc_avg, epoch)
-
-    LoggerInfo = '''
-    [Test (Source Domain)]: 
-    Data Time {data_time.sum:.4f} ({data_time.avg:.4f})
-    Batch Time {batch_time.sum:.4f} ({batch_time.avg:.4f})\n'''.format(data_time=data_time, batch_time=batch_time)
-
-    LoggerInfo+=AccuracyInfo
-
+    
+    LoggerInfo=AccuracyInfo
     LoggerInfo+='''    Acc_avg {0:.4f} Prec_avg {1:.4f} Recall_avg {2:.4f} F1_avg {3:.4f}
     Loss {loss:.4f}'''.format(acc_avg, prec_avg, recall_avg, f1_avg, loss=loss.avg)
 
     print(LoggerInfo)
 
-    # Test on Target Domain
-    acc, prec, recall = [AverageMeter() for i in range(args.class_num)], [AverageMeter() for i in range(args.class_num)], [AverageMeter() for i in range(args.class_num)]
-    loss, data_time, batch_time =  AverageMeter(), AverageMeter(), AverageMeter()
+    if domain == 'Target' and split == 'unlabeled train':
+        # Save Checkpoints
+        if recall_avg > Best_Recall:
+            Best_Recall = recall_avg
+            print('[Save] Best Recall: %.4f.' % Best_Recall)
 
-    end = time.time()
-    for batch_index, (input, landmark, target) in enumerate(iter_target_dataloader):
-        data_time.update(time.time()-end)
+            if isinstance(model, nn.DataParallel):
+                torch.save(model.module.state_dict(), os.path.join(args.out, '{}_Recall.pkl'.format(args.log)))
+            else:
+                torch.save(model.state_dict(), os.path.join(args.out, '{}_Recall.pkl'.format(args.log)))
 
-        input, landmark, target = input.cuda(), landmark.cuda(), target.cuda()
-        
-        with torch.no_grad():
-            end = time.time()
-            feature, output, loc_output = model(input, landmark, False, 'Target')
-            batch_time.update(time.time()-end)
-        
-        loss_ = nn.CrossEntropyLoss()(output, target)
+        if acc_avg > Best_Accuracy:
+            Best_Accuracy = acc_avg
+            print('[Save] Best Accuracy: %.4f.' % Best_Accuracy)
 
-        # Compute accuracy, precision and recall
-        Compute_Accuracy(args, output, target, acc, prec, recall)
-
-        # Log loss
-        loss.update(float(loss_.cpu().data.numpy()))
-
-        end = time.time()
-
-    AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
-
-    writer.add_scalar('Test_Recall_TargetDomain', recall_avg, epoch)
-    writer.add_scalar('Test_Accuracy_TargetDomain', acc_avg, epoch)
-
-    LoggerInfo = '''
-    [Test (Target Domain)]: 
-    Data Time {data_time.sum:.4f} ({data_time.avg:.4f})
-    Batch Time {batch_time.sum:.4f} ({batch_time.avg:.4f})\n'''.format(data_time=data_time, batch_time=batch_time)
-
-    LoggerInfo+=AccuracyInfo
-
-    LoggerInfo+='''    Acc_avg {0:.4f} Prec_avg {1:.4f} Recall_avg {2:.4f} F1_avg {3:.4f}
-    Loss {loss:.4f}'''.format(acc_avg, prec_avg, recall_avg, f1_avg, loss=loss.avg)
-    
-    print(LoggerInfo)
-
-    # Save Checkpoints
-    if recall_avg > Best_Recall:
-        Best_Recall = recall_avg
-        print('[Save] Best Recall: %.4f.' % Best_Recall)
-
-        if isinstance(model, nn.DataParallel):
-            torch.save(model.module.state_dict(), os.path.join(args.out, '{}_Recall.pkl'.format(args.log)))
-        else:
-            torch.save(model.state_dict(), os.path.join(args.out, '{}_Recall.pkl'.format(args.log)))
-    
-    if acc_avg > Best_Accuracy:
-        Best_Accuracy = acc_avg
-        print('[Save] Best Accuracy: %.4f.' % Best_Accuracy)
-        
-        if isinstance(model, nn.DataParallel):
-            torch.save(model.module.state_dict(), os.path.join(args.out, '{}_Accuracy.pkl'.format(args.log)))
-        else:
-            torch.save(model.state_dict(), os.path.join(args.out, '{}_Accuracy.pkl'.format(args.log)))
+            if isinstance(model, nn.DataParallel):
+                torch.save(model.module.state_dict(), os.path.join(args.out, '{}_Accuracy.pkl'.format(args.log)))
+            else:
+                torch.save(model.state_dict(), os.path.join(args.out, '{}_Accuracy.pkl'.format(args.log)))
 
     return Best_Accuracy, Best_Recall
 
@@ -342,6 +292,7 @@ def main():
     args = parser.parse_args()
     torch.manual_seed(args.seed)
 
+    print(args)
     # Experiment Information
     print('Log Name: %s' % args.log)
     print('Output Path: %s' % args.out)
@@ -431,7 +382,7 @@ def main():
     print('Building Model...')
     model = BulidModel(args)
     print('Done!')
-
+    #print(model)
     print('================================================')
 
     # Bulid Adversarial Network
@@ -456,14 +407,14 @@ def main():
     if args.local_feat and args.intra_gcn and args.inter_gcn and not args.isTest:        
         if args.use_cov:
             print('Init Mean and Cov...')
-            Initialize_Mean_Cov(args, model, False)
+            Initialize_Mean_Cov(args, train_source_dataloader, train_target_dataloader, model, False)
         else:
             if args.use_cluster:
                 print('Initialize Mean in Cluster....')
-                Initialize_Mean_Cluster(args, model, False)
+                Initialize_Mean_Cluster(args, train_source_dataloader, train_target_dataloader, model, False)
             else:         
                 print('Init Mean...')
-                Initialize_Mean(args, model, False)
+                Initialize_Mean(args, train_source_dataloader, train_target_dataloader, model, False)
 
         torch.cuda.empty_cache()
 
@@ -478,7 +429,6 @@ def main():
     writer = SummaryWriter(os.path.join(args.out, args.log))
 
     for epoch in range(1, args.epochs + 1):
-
         if args.show_feat and epoch%5 == 1:
             Visualization('{}_Source.pdf'.format(epoch), model, train_source_dataloader, useClassify=False, domain='Source')
             Visualization('{}_Target.pdf'.format(epoch), model, train_target_dataloader, useClassify=False, domain='Target')
@@ -491,8 +441,12 @@ def main():
                 Initialize_Mean_Cluster(args, model, False)
                 torch.cuda.empty_cache()
             Train(args, model, ad_net, random_layer, train_source_dataloader, train_target_dataloader, optimizer, optimizer_ad, epoch, writer)
-            
-        Best_Accuracy, Best_Recall = Test(args, model, test_source_dataloader, test_target_dataloader, Best_Accuracy, Best_Recall, epoch, writer)
+        print('\nEvaluating train sets:')
+        Test_dataloader(args, model, train_source_dataloader, Best_Accuracy, Best_Recall, domain = 'Source', split= 'train')
+        Best_Accuracy, Best_Recall = Test_dataloader(args, model, train_target_dataloader, Best_Accuracy, Best_Recall, domain ='Target', split= 'unlabeled train')
+        print('\nEvaluating test sets:')
+        Test_dataloader(args, model, test_source_dataloader, Best_Accuracy, Best_Recall, domain= 'Source', split= 'test')
+        Test_dataloader(args, model, test_target_dataloader, Best_Accuracy, Best_Recall, domain = 'Target', split= 'test')
 
     writer.close()
 

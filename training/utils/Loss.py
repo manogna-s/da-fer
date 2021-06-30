@@ -30,14 +30,16 @@ def grl_hook(coeff):
         return - coeff * grad.clone()
     return fun1
 
-def MME(model, feat, lamda=0.1, coeff=1.0,mode='standard'):
+def MME(model, feat, lamda=0.1, coeff=1.0):
     '''
     Paper Link : https://arxiv.org/pdf/1904.06487.pdf
     Github Link : https://github.com/VisionLearningGroup/SSDA_MME
-    '''
-    if mode == 'minimax':
-        feat.register_hook(grl_hook(coeff))
-    feat =  model.fc(feat)
+    '''    
+    feat.register_hook(grl_hook(coeff))
+    if isinstance(model, nn.DataParallel):
+        feat = model.module.fc(feat)
+    else:
+        feat =  model.fc(feat)
     feat = F.softmax(feat)
     loss_adent = lamda * torch.mean(torch.sum(feat * (torch.log(feat + 1e-5)), 1))
     return loss_adent

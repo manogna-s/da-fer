@@ -169,13 +169,12 @@ class Backbone(nn.Module):
                                 bottleneck.stride))
         cropNet_modules+=[nn.Conv2d(in_channels=512, out_channels=64, kernel_size=(3,3), stride=(1,1), padding=(1,1)), nn.ReLU()]
         self.Crop_Net = nn.ModuleList([ copy.deepcopy(nn.Sequential(*cropNet_modules)) for i in range(5) ])
-        self.GAP = nn.AdaptiveAvgPool2d((1,1))
         self.fc = nn.Linear(64 + 320, class_num)
         self.fc.apply(init_weights)
 
         self.loc_fc = nn.Linear(320, class_num)
         self.loc_fc.apply(init_weights)
-
+        self.GAP = nn.AdaptiveAvgPool2d((1,1))
 
     def classify(self, imgs, locations):
 

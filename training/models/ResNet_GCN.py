@@ -139,7 +139,7 @@ def init_weights(m):
     elif classname.find('Linear') != -1:
         nn.init.xavier_normal_(m.weight)
         nn.init.zeros_(m.bias)
-'''
+
 class Backbone(nn.Module):
     def __init__(self, numOfLayer, useIntraGCN=True, useInterGCN=True, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=False, class_num = 7):   
 
@@ -278,6 +278,8 @@ class Backbone(nn.Module):
                 feature = self.GCN(feature.view(feature.size(0), 12, -1))       # Batch * 12 * 64
 
             elif domain=='Target':
+                if not self.training:
+                    print('testing target')
                 TargetFeature = feature                                         # Batch * (64+320)
                 SourceMean = self.SourceMean.getSample(TargetFeature.detach())  # Batch * (64+320)
 
@@ -373,7 +375,8 @@ class Backbone(nn.Module):
         loc_feature = loc_feature.view(batch_size, -1) # batch_size * 320 
 
         return loc_feature
-    '''
+
+'''
 class Backbone(nn.Module):
     def __init__(self, numOfLayer, useIntraGCN=True, useInterGCN=True, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=False, class_num = 7):   
 
@@ -438,6 +441,7 @@ class Backbone(nn.Module):
         # GCN
         if self.training:
             feature = self.SourceMean(feature)
+        feature.cuda()
         feature = torch.cat( ( self.SourceBN(feature), self.TargetBN(self.TargetMean.getSample(feature.clone().detach())) ), 1) # Batch * (64+320 + 64+320)
         feature = self.GCN(feature.view(feature.size(0), 12, -1))                                                       # Batch * 12 * 64
 
@@ -593,6 +597,7 @@ class Backbone(nn.Module):
         loc_feature = loc_feature.view(batch_size, -1) # batch_size * 320 
 
         return loc_feature
+'''
 
 class Backbone_onlyGlobal(nn.Module):
     def __init__(self,numOfLayer, class_num):
@@ -678,7 +683,7 @@ def IR_GCN(numOfLayer, useIntraGCN, useInterGCN, useRandomMatrix, useAllOneMatri
 
     return model
 
-def IR_onlyGlobal_GCN(numOfLayer):
+def IR_onlyGlobal_GCN(numOfLayer, class_num):
     """Constructs a ir-18/ir-50 model."""
 
     model = Backbone_onlyGlobal(numOfLayer, class_num)

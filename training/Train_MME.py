@@ -1,4 +1,4 @@
-'i''
+'''
 Run using $sh mme_train.sh gpu_id exp_name local_feat
 $sh mme_train.sh 0 mme_only_global False
 '''
@@ -18,7 +18,7 @@ import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
 
-from utils.Loss import MME_loss
+from utils.Loss import MME
 from utils.Utils import *
 
 parser = argparse.ArgumentParser(description='Domain adaptation for Expression Classification')
@@ -38,12 +38,12 @@ parser.add_argument('--dr', type=float, default=1.0, help='radius of SAFN (defau
 parser.add_argument('--w_l2', type=float, default=0.05, help='weight L2 norm of AFN (default: 0.05)')
 
 parser.add_argument('--face_scale', type=int, default=112, help='Scale of face (default: 112)')
-parser.add_argument('--source', type=str, default='RAF', choices=['RAF', 'AFED', 'MMI'])
+parser.add_argument('--source', type=str, default='RAF', choices=['RAF', 'RAF_7class','AFED', 'MMI'])
 parser.add_argument('--target', type=str, default='AISIN', choices=['RAF', 'CK+', 'JAFFE', 'MMI', 'Oulu-CASIA', 'SFEW', 'FER2013', 'ExpW', 'AFED', 'WFED','AISIN'])
 parser.add_argument('--train_batch', type=int, default=64, help='input batch size for training (default: 64)')
 parser.add_argument('--test_batch', type=int, default=64, help='input batch size for testing (default: 64)')
 parser.add_argument('--num_unlabeled', type=int, default=-1, help='number of unlabeled samples (default: -1 == all samples)')
-
+parser.add_argument('--lamda', type=float, default=0.1)
 parser.add_argument('--lr', type=float, default=0.0001)
 
 parser.add_argument('--epochs', type=int, default=50, help='number of epochs to train (default: 10)')
@@ -140,7 +140,7 @@ def Train_MME(args, model, train_source_dataloader, train_target_dataloader, opt
 
 
         feat_target, out_target, loc_out_target = model(data_target, landmark_target)
-        mme_loss_ = MME_loss(model, feat_target)
+        mme_loss_ = MME(model, feat_target, lamda=args.lamda) 
 
         optimizer.zero_grad()
         with torch.autograd.detect_anomaly():
@@ -365,8 +365,9 @@ def main():
 
     # Bulid Model
     print('Building Model...')
-    model = BulidModel(args)
+    model = Build_Backbone(args)
     print('Done!')
+    #print(model)
 
     print('================================================')
 

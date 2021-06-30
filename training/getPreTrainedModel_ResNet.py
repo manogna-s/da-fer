@@ -1,12 +1,13 @@
 import torch
-
+from models.ResNet import IR_local, IR_global
 from models.ResNet_GCN import IR_GCN, IR_onlyGlobal_GCN
 
 numOfLayer = 50 # [18, 50]
 
 
-model = IR_GCN(numOfLayer=numOfLayer, useIntraGCN=True, useInterGCN=True, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=True, class_num=2)
-# model = IR_onlyGlobal(numOfLayer=numOfLayer)
+model = IR_GCN(numOfLayer=numOfLayer, useIntraGCN=False, useInterGCN=False, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=False, class_num=2)
+#model = IR_local(numOfLayer=numOfLayer, class_num=7)
+model = IR_global(numOfLayer=numOfLayer, class_num=2)
 
 model_dict = model.state_dict()
 checkpoint = torch.load('./pretrained_models/msceleb_ckpts/backbone_ir50_ms1m_epoch120.pth') if numOfLayer == 50 else \
@@ -44,9 +45,13 @@ for key, value in model_dict.items():
 
 model.load_state_dict(newCheckpoint)
 if numOfLayer == 50:
-    torch.save(model.state_dict(), './pretrained_models/ckpts/ir50_ms1m_112_CropNet_GCN_useCluster.pkl')
+    torch.save(model.state_dict(), './pretrained_models/ckpts/ir50_ms1m_112_CropNet_features_2class.pkl')
+    # torch.save(model.state_dict(), './pretrained_models/ckpts/ir50_ms1m_112_CropNet_GCN_useMean_7class.pkl')
+    # torch.save(model.state_dict(), './pretrained_models/ckpts/ir50_ms1m_112_CropNet_GCN_useMean.pkl')
     # torch.save(model.state_dict(), './preTrainedModel/ir50_ms1m_112_onlyGlobal.pkl')
-    
+    torch.save(model.state_dict(), './pretrained_models/ckpts/ir50_global_2class.pkl')
+    #torch.save(model.state_dict(), './pretrained_models/ckpts/ir50_local_7class.pkl')
+
 elif numOfLayer == 18:
     torch.save(model.state_dict(), './pretrained_models/ckpts/ir18_lfw_112_CropNet_GCNwithIntraMatrixAndInterMatrix_useCluster.pkl')
     # torch.save(model.state_dict(), './preTrainedModel/ir18_lfw_112_onlyGlobal.pkl')

@@ -79,7 +79,7 @@ def Train(args, model, ad_net, random_layer, train_source_dataloader, train_targ
     if args.use_dan:
         num_ADNet = 0
         ad_net.train()
-
+    '''
     # Decay Learn Rate per Epoch
     if epoch <= 20:
         args.lr, args.lr_ad = 0.0001, 0.001
@@ -87,6 +87,7 @@ def Train(args, model, ad_net, random_layer, train_source_dataloader, train_targ
         args.lr, args.lr_ad = 0.0001, 0.0001
     else:
         args.lr, args.lr_ad = 0.00001, 0.00001
+    '''
 
     optimizer, lr = lr_scheduler_withoutDecay(optimizer, lr=args.lr)
     if args.use_dan:

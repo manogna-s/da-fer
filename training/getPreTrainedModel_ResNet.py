@@ -7,7 +7,7 @@ numOfLayer = 50 # [18, 50]
 
 model = IR_GCN(numOfLayer=numOfLayer, useIntraGCN=False, useInterGCN=False, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=False, class_num=2)
 #model = IR_local(numOfLayer=numOfLayer, class_num=7)
-model = IR_global(numOfLayer=numOfLayer, class_num=2)
+#model = IR_global(numOfLayer=numOfLayer, class_num=2)
 
 model_dict = model.state_dict()
 checkpoint = torch.load('./pretrained_models/msceleb_ckpts/backbone_ir50_ms1m_epoch120.pth') if numOfLayer == 50 else \
@@ -49,7 +49,7 @@ if numOfLayer == 50:
     # torch.save(model.state_dict(), './pretrained_models/ckpts/ir50_ms1m_112_CropNet_GCN_useMean_7class.pkl')
     # torch.save(model.state_dict(), './pretrained_models/ckpts/ir50_ms1m_112_CropNet_GCN_useMean.pkl')
     # torch.save(model.state_dict(), './preTrainedModel/ir50_ms1m_112_onlyGlobal.pkl')
-    torch.save(model.state_dict(), './pretrained_models/ckpts/ir50_global_2class.pkl')
+    torch.save(model.state_dict(), './pretrained_models/ckpts/ir50_local_2class.pkl')
     #torch.save(model.state_dict(), './pretrained_models/ckpts/ir50_local_7class.pkl')
 
 elif numOfLayer == 18:

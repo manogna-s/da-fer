@@ -42,7 +42,7 @@ parser.add_argument('--source', type=str, default='RAF', choices=['RAF', 'RAF_7c
 parser.add_argument('--target', type=str, default='AISIN', choices=['RAF', 'CK+', 'JAFFE', 'MMI', 'Oulu-CASIA', 'SFEW', 'FER2013', 'ExpW', 'AFED', 'WFED','AISIN'])
 parser.add_argument('--train_batch', type=int, default=64, help='input batch size for training (default: 64)')
 parser.add_argument('--test_batch', type=int, default=64, help='input batch size for testing (default: 64)')
-parser.add_argument('--num_unlabeled', type=int, default=-1, help='number of unlabeled samples (default: -1 == all samples)')
+parser.add_argument('--num_unlabeled', type=int, default=1700, help='number of unlabeled samples (default: -1 == all samples)')
 parser.add_argument('--lamda', type=float, default=0.1)
 parser.add_argument('--lr', type=float, default=0.0001)
 
@@ -385,6 +385,8 @@ def main():
 
     for epoch in range(1, args.epochs + 1):
         Train_MME(args, model, train_source_dataloader, train_target_dataloader, optimizer, epoch, writer)
+        Best_Accuracy, Best_Recall = Test(args, model, train_source_dataloader, train_target_dataloader, Best_Accuracy,
+                                          Best_Recall, epoch, writer)
         Best_Accuracy, Best_Recall = Test(args, model, test_source_dataloader, test_target_dataloader, Best_Accuracy,
                                           Best_Recall, epoch, writer)
 

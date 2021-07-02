@@ -247,6 +247,7 @@ def BulidDataloader(args, flag1='train', flag2='source', balanced=-1):
             if args.source == 'RAF':
                 list_patition_label = pd.read_csv(dataPath_prefix+'/%s/lists/image_list.txt'%(args.source), header=None, delim_whitespace=True)
                 list_patition_label = np.array(list_patition_label)
+                n_class = {0:0, 1:0}
                 for index in range(list_patition_label.shape[0]):
                     if list_patition_label[index,0][:5] == "train":
                         if not os.path.exists(dataPath_prefix+'/%s/boundingbox/'%(args.source)+list_patition_label[index,0][:-4] + '_boundingbox' + '.txt'):
@@ -255,16 +256,17 @@ def BulidDataloader(args, flag1='train', flag2='source', balanced=-1):
                             continue
                         bbox = np.loadtxt(dataPath_prefix+'/%s/boundingbox/'%(args.source)+list_patition_label[index,0][:-4]+'_boundingbox.txt').astype(np.int)
                         landmark = np.loadtxt(dataPath_prefix+'/%s/landmarks_5/'%(args.source)+list_patition_label[index,0][:-3]+'txt').astype(np.int)
-
-                        data_imgs.append(dataPath_prefix+'/%s/images/'%(args.source)+list_patition_label[index,0])
-                        data_labels.append(list_patition_label[index,1])
-                        data_bboxs.append(bbox)
-                        data_landmarks.append(landmark)
+                        label = list_patition_label[index,1]
+                        if n_class[label]<2465:
+                            data_imgs.append(dataPath_prefix+'/%s/images/'%(args.source)+list_patition_label[index,0])
+                            data_labels.append(list_patition_label[index,1])
+                            data_bboxs.append(bbox)
+                            data_landmarks.append(landmark)
+                            n_class[label]+=1
             
             if args.source == 'RAF_7class':
                 list_patition_label = pd.read_csv(dataPath_prefix+'/RAF_7class/basic/EmoLabel/list_patition_label.txt', header=None, delim_whitespace=True)
                 list_patition_label = np.array(list_patition_label)
-
                 for index in range(list_patition_label.shape[0]):
                     if list_patition_label[index,0][:5] == "train":
                         #print(dataPath_prefix+'/RAF_7class/basic/Annotation/boundingbox/'+list_patition_label[index,0][:-4]+ '_boundingbox' +'.txt')
@@ -274,7 +276,7 @@ def BulidDataloader(args, flag1='train', flag2='source', balanced=-1):
                             continue
                         bbox = np.loadtxt(dataPath_prefix+'/RAF_7class/basic/Annotation/boundingbox/'+list_patition_label[index,0][:-4]+ '_boundingbox.txt').astype(np.int)
                         landmark = np.loadtxt(dataPath_prefix+'/RAF_7class/basic/Annotation/Landmarks_5/'+list_patition_label[index,0][:-3]+'txt').astype(np.int)
-
+                        
                         data_imgs.append(dataPath_prefix+'/RAF_7class/basic/Image/original/'+list_patition_label[index,0])
                         data_labels.append(list_patition_label[index,1]-1)
                         data_bboxs.append(bbox)

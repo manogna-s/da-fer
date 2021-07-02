@@ -14,6 +14,12 @@ This repository is built using some part of code from [here](https://github.com/
     6: Neutral
 ```
 
+- This code supports only ResNet-18/50 backbones and is validated using only ResNet50.
+- Datasets supported:
+    - Source: 'RAF', 'RAF_7class' (use 'RAF' for 2class)
+    - Target: 'AISIN', 'JAFFE'
+- To use other backbones/ datasets refer [AGRA official code](https://github.com/HCPLab-SYSU/CD-FER-Benchmark/tree/master/AGRA)    
+
 ## RAF to AISIN 
 Classes: Happy, Neutral
 
@@ -41,8 +47,8 @@ Place data and ckpts in this folder structure
 ## Training
 
 ### Features
-- Global(Face) + local(landmarks): Set ```---local_feat True```
-- Only Global(Face)              : Set ```---local_feat False```
+- Global(Face) + local(landmarks): Set ```--local_feat True```
+- Only Global(Face)              : Set ```--local_feat False```
 
 ### Methods
 - Train only on source data 
@@ -66,9 +72,10 @@ To set number of samples per class/ to use balanced dataset (only for 2-class RA
 --source_labeled {n_source_train} 
 --target_unlabeled {n_target_train}
 ```
-For RAF to AISIN with balanced dataset, use n_source_train~2465, n_target_train~1700
+For RAF to AISIN with balanced dataset, use approx n_source_train = 2465, n_target_train = 1700
  
-- Training GCN on source and using k-means init is not working currently. 
+Note: Training GCN on source and using k-means init is not working currently. 
+
 
 
 

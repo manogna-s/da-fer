@@ -5,7 +5,7 @@ import time
 def Test(args, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='Target', split='test'):
     """Test."""
 
-    print(f'Testing on {domain} {split} set')
+    print(f'\n[{domain} {split} set]')
     model.eval()
     torch.autograd.set_detect_anomaly(True)
 
@@ -26,7 +26,7 @@ def Test(args, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='
         with torch.no_grad():
             end = time.time()
             if args.use_gcn:
-                feature, output, loc_output = model(input, landmark, useClassify=args.useClassify, domain=domain)
+                feature, output, loc_output = model(input, landmark, args.useClassify, domain=domain)
             else:
                 feature, output, loc_output = model(input, landmark)
             batch_time.update(time.time() - end)
@@ -55,18 +55,19 @@ def Test(args, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='
             Best_Recall = recall_avg
             print('[Save] Best Recall: %.4f.' % Best_Recall)
 
-            if isinstance(model, nn.DataParallel):
-                torch.save(model.module.state_dict(), os.path.join(args.out, '{}_Recall.pkl'.format(args.log)))
-            else:
-                torch.save(model.state_dict(), os.path.join(args.out, '{}_Recall.pkl'.format(args.log)))
+            if args.save_checkpoint:
+                if isinstance(model, nn.DataParallel):
+                    torch.save(model.module.state_dict(), os.path.join(args.out, '{}_Recall.pkl'.format(args.log)))
+                else:
+                    torch.save(model.state_dict(), os.path.join(args.out, '{}_Recall.pkl'.format(args.log)))
 
         if acc_avg > Best_Accuracy:
             Best_Accuracy = acc_avg
             print('[Save] Best Accuracy: %.4f.' % Best_Accuracy)
-
-            if isinstance(model, nn.DataParallel):
-                torch.save(model.module.state_dict(), os.path.join(args.out, '{}_Accuracy.pkl'.format(args.log)))
-            else:
-                torch.save(model.state_dict(), os.path.join(args.out, '{}_Accuracy.pkl'.format(args.log)))
+            if args.save_checkpoint:
+                if isinstance(model, nn.DataParallel):
+                    torch.save(model.module.state_dict(), os.path.join(args.out, '{}_Accuracy.pkl'.format(args.log)))
+                else:
+                    torch.save(model.state_dict(), os.path.join(args.out, '{}_Accuracy.pkl'.format(args.log)))
 
     return Best_Accuracy, Best_Recall

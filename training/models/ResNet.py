@@ -76,7 +76,7 @@ class Backbone_Global_Local(nn.Module):
 
         return feature, pred, loc_pred
 
-    def forward(self, imgs, locations):
+    def forward(self, imgs, locations, useClassify=True):
 
         return self.classify(imgs, locations)
 

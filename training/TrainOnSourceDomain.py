@@ -57,10 +57,10 @@ def TrainOnSource(args, model, train_dataloader, optimizer, epoch, writer):
         # Compute Loss
         global_cls_loss_ = nn.CrossEntropyLoss()(output, label)
         local_cls_loss_ = nn.CrossEntropyLoss()(loc_output, label) if args.local_feat else 0
-        afn_loss_ = (HAFN(feature, args.weight_L2norm, args.radius) if args.methodOfAFN == 'HAFN' else SAFN(feature,
-                                                                                                            args.weight_L2norm,
-                                                                                                            args.deltaRadius)) if args.useAFN else 0
-        loss_ = global_cls_loss_ + local_cls_loss_ + (afn_loss_ if args.useAFN else 0)
+        afn_loss_ = (HAFN(feature, args.w_l2, args.r) if args.afn_method == 'HAFN' else SAFN(feature,
+                                                                                                            args.w_l2,
+                                                                                                            args.dr)) if args.use_afn else 0
+        loss_ = global_cls_loss_ + local_cls_loss_ + (afn_loss_ if args.use_afn else 0)
 
         # Back Propagation
         optimizer.zero_grad()
@@ -82,7 +82,7 @@ def TrainOnSource(args, model, train_dataloader, optimizer, epoch, writer):
         loss.update(float(loss_.cpu().data.item()))
         global_cls_loss.update(float(global_cls_loss_.cpu().data.item()))
         local_cls_loss.update(float(local_cls_loss_.cpu().data.item()) if args.local_feat else 0)
-        afn_loss.update(float(afn_loss_.cpu().data.item()) if args.useAFN else 0)
+        afn_loss.update(float(afn_loss_.cpu().data.item()) if args.use_afn else 0)
 
         end = time.time()
 
@@ -98,7 +98,7 @@ def TrainOnSource(args, model, train_dataloader, optimizer, epoch, writer):
     writer.add_scalar('AFN_Loss', afn_loss.avg, epoch)
 
     LoggerInfo = '''
-    \n[Train]: 
+    \n[Training]: 
     Epoch {0}
     Learning Rate {1}\n'''.format(epoch, args.lr)
 
@@ -129,10 +129,10 @@ def main():
     Best_Recall = 0
 
     # Running Experiment
-    print("Run Experiment...")
+    print("Training only on source domain...")
 
     for epoch in range(1, args.epochs + 1):
-        if args.showFeature and epoch % 5 == 1:
+        if args.show_feat and epoch % 5 == 1:
             VizFeatures(args, epoch, model, dataloaders)
 
         if args.use_gcn and args.use_cluster and epoch % 10 == 0:
@@ -141,12 +141,9 @@ def main():
         TrainOnSource(args, model, dataloaders['train_source'], optimizer, epoch, writer)
 
         print('[Testing]')
-        print('\nEvaluating train sets:')
         Best_Accuracy, Best_Recall = Test(args, model, dataloaders['train_source'], Best_Accuracy, Best_Recall,
                                           domain='Target', split='unlabeled train')
         Test(args, model, dataloaders['train_target'], Best_Accuracy, Best_Recall, domain='Source', split='train')
-
-        print('\nEvaluating test sets:')
         Test(args, model, dataloaders['test_source'], Best_Accuracy, Best_Recall, domain='Source', split='test')
         Test(args, model, dataloaders['test_target'], Best_Accuracy, Best_Recall, domain='Target', split='test')
 

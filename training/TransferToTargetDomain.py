@@ -66,7 +66,7 @@ def Train_DANN(args, model, ad_net, random_layer, train_source_dataloader, train
         # Forward Propagation
         end = time.time()
         feature, output, loc_output = model(torch.cat((data_source, data_target), 0),
-                                            torch.cat((landmark_source, landmark_target), 0), False)
+                                            torch.cat((landmark_source, landmark_target), 0), args.useClassify)
         feat_target = feature[args.train_batch:, :]
         batch_time.update(time.time() - end)
 
@@ -162,7 +162,7 @@ def Train_DANN(args, model, ad_net, random_layer, train_source_dataloader, train
     if args.use_dan:
         writer.add_scalar('AdversarialNetwork_Accuracy', num_ADNet / (2.0 * args.train_batch * num_iter), epoch)
 
-    LoggerInfo = '''
+    LoggerInfo = '''\n
     [Train on Source and unlabeled target]: 
     Epoch {0}
     Learning Rate {1} Learning Rate(AdversarialNet) {2}\n'''.format(epoch, lr, lr_ad if args.use_dan else 0)
@@ -216,11 +216,10 @@ def main():
 
         Train_DANN(args, model, ad_net, random_layer, dataloaders['train_source'], dataloaders['train_target'], optimizer,
                   optimizer_ad, epoch, writer)
-        print('\nEvaluating train sets:')
+        print('\n[Testing...]')
         Test(args, model, dataloaders['train_source'], domain='Source', split='train')
         Best_Accuracy, Best_Recall = Test(args, model, dataloaders['train_target'], Best_Accuracy, Best_Recall,
                                           domain='Target', split='unlabeled train')
-        print('\nEvaluating test sets:')
         Test(args, model, dataloaders['test_source'], domain='Source', split='test')
         Test(args, model, dataloaders['test_target'], domain='Target', split='test')
 

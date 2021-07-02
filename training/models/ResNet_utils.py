@@ -9,7 +9,7 @@ from torch.nn import Conv2d, BatchNorm2d, PReLU, ReLU, Sigmoid, MaxPool2d, \
 def load_resnet_pretrained_weights(model, numOfLayer):
     model_dict = model.state_dict()
     if numOfLayer == 50:
-        checkpoint = torch.load('./pretrained_models/msceleb_ckpts/backbone_ir50_ms1m_epoch120.pth')
+        checkpoint = torch.load('../pretrained_ckpts/backbone_ir50_ms1m_epoch120.pth')
         indexToLayer = {'0': 'layer1.0.', '1': 'layer1.1.', '2': 'layer1.2.',
                         '3': 'layer2.0.', '4': 'layer2.1.', '5': 'layer2.2.', '6': 'layer2.3.',
                         '7': 'layer3.0.', '8': 'layer3.1.', '9': 'layer3.2.', '10': 'layer3.3.', '11': 'layer3.4.',
@@ -17,7 +17,7 @@ def load_resnet_pretrained_weights(model, numOfLayer):
                         '17': 'layer3.10.', '18': 'layer3.11.', '19': 'layer3.12.', '20': 'layer3.13.',
                         '21': 'layer4.0.', '22': 'layer4.1.', '23': 'layer4.2.'}
     else:
-        checkpoint = torch.load('./pretrained_models/msceleb_ckpts/backbone_IR_18_HeadFC_Softmax_112_512_1.0_Epoch_156_lfw_112_0.994_X4_112_0.990_agedb_30_112_0.949.pth')
+        checkpoint = torch.load('./pretrained_ckpts/backbone_IR_18_HeadFC_Softmax_112_512_1.0_Epoch_156_lfw_112_0.994_X4_112_0.990_agedb_30_112_0.949.pth')
         indexToLayer = {'0': 'layer1.0.', '1': 'layer1.1.',
                         '2': 'layer2.0.', '3': 'layer2.1.',
                         '4': 'layer3.0.', '5': 'layer3.1.',

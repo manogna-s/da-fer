@@ -124,7 +124,7 @@ def BuildDataloader(args, flag1='train', flag2='source', max_samples=-1):
                         if n_class[label] < max_samples:
                             data_imgs.append(
                                 dataPath_prefix + '/%s/images/' % (args.source) + list_patition_label[index, 0])
-                            data_labels.append(list_patition_label[index, 1])
+                            data_labels.append(label)
                             data_bboxs.append(bbox)
                             data_landmarks.append(landmark)
                             n_class[label] += 1
@@ -168,6 +168,7 @@ def BuildDataloader(args, flag1='train', flag2='source', max_samples=-1):
                                                   header=None,
                                                   delim_whitespace=True)
                 list_patition_label = np.array(list_patition_label)
+                n_class = {0: 0, 1: 0}
                 n_samples = list_patition_label.shape[0]
                 if max_samples == -1:
                     max_samples = n_samples
@@ -188,9 +189,10 @@ def BuildDataloader(args, flag1='train', flag2='source', max_samples=-1):
                         if n_class[label] < max_samples:
                             data_imgs.append(
                                 dataPath_prefix + '/%s/images/' % (args.target) + list_patition_label[index, 0])
-                            data_labels.append(list_patition_label[index, 1])
+                            data_labels.append(label)
                             data_bboxs.append((0, 0, ori_img_w, ori_img_h))
                             data_landmarks.append(landmark)
+                            n_class[label]+=1
 
             if args.target == 'JAFFE':
                 list_patition_label = pd.read_csv(dataPath_prefix + '/JAFFE/list/list_putao.txt', header=None,

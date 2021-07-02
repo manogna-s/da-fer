@@ -1,5 +1,5 @@
 from torch.utils.tensorboard import SummaryWriter
-
+import json
 from models.GCN_utils import init_gcn
 from utils.Utils import *
 
@@ -9,7 +9,8 @@ parser.add_argument('--log', type=str, help='Log Name')
 parser.add_argument('--out', type=str, help='Output Path')
 parser.add_argument('--net', type=str, default='ResNet50', choices=['ResNet18', 'ResNet50', 'VGGNet', 'MobileNet'])
 parser.add_argument('--pretrained', type=str2bool, help='pretrained', default=True)
-parser.add_argument('--dev', default='0', type=str, help='CUDA_VISIBLE_DEVICES')
+parser.add_argument('--GPU_ID', default='0', type=str, help='CUDA_VISIBLE_DEVICES')
+parser.add_argument('--save_checkpoint', type=str2bool, default=False, help='whether to save checkpoint')
 
 # Dataset args
 parser.add_argument('--source', type=str, default='RAF', choices=['RAF', 'RAF_7class'])
@@ -53,7 +54,7 @@ parser.add_argument('--weight_decay', type=float, default=0.0005, help='SGD weig
 
 # GCN params
 parser.add_argument('--use_gcn', type=str2bool, default=False, help='whether to use GCN')
-parser.add_argument('--useClassify', type=str2bool, default=False, help='whether training on source')
+parser.add_argument('--useClassify', type=str2bool, default=True, help='whether training on source')
 parser.add_argument('--intra_gcn', type=str2bool, default=False, help='whether to use Intra-GCN')
 parser.add_argument('--inter_gcn', type=str2bool, default=False, help='whether to use Inter-GCN')
 parser.add_argument('--rand_mat', type=str2bool, default=False, help='whether to use Random Matrix')
@@ -62,6 +63,8 @@ parser.add_argument('--use_cov', type=str2bool, default=False, help='whether to 
 parser.add_argument('--rand_layer', type=str2bool, default=False, help='whether to use random')
 parser.add_argument('--use_cluster', type=str2bool, default=False, help='whether to use Cluster')
 parser.add_argument('--method', type=str, default="CADA", help='Choose the method of the experiment')
+
+
 parser.add_argument('--isTest', type=str2bool, default=False, help='whether to test model')
 parser.add_argument('--show_feat', type=str2bool, default=False, help='whether to show feature')
 parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
@@ -75,7 +78,7 @@ def print_experiment_info(args):
     print('Output Path: %s' % args.out)
     print('Backbone: %s' % args.net)
     print('Resume Model: %s' % args.pretrained)
-    print('CUDA_VISIBLE_DEVICES: %s' % args.dev)
+    print('CUDA_VISIBLE_DEVICES: %s' % args.GPU_ID)
     print('================================================')
 
     print('Use {} * {} Image'.format(args.face_scale, args.face_scale))
@@ -174,6 +177,10 @@ def train_setup(args):
 
     print('================================================')
 
-    writer = SummaryWriter(os.path.join(args.OutputPath, args.Log_Name))
+    writer = SummaryWriter(os.path.join(args.out, args.log))
+
+    #save arguments used
+    with open(os.path.join(args.out,'args.txt'), 'w') as f:
+        json.dump(args.__dict__, f, indent=2)
 
     return dataloaders, model, optimizer, writer

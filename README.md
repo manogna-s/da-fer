@@ -14,10 +14,10 @@ This repository is built using some part of code from [here](https://github.com/
     6: Neutral
 ```
 
-##RAF to AISIN 
+## RAF to AISIN 
 Classes: Happy, Neutral
 
-###Dataset and pretrained models
+### Dataset and pretrained models
 Place data and ckpts in this folder structure
 ```commandline
 + da-fer
@@ -38,13 +38,13 @@ Place data and ckpts in this folder structure
 ```
 
 
-##Training
+## Training
 
-###Features
+### Features
 - Global(Face) + local(landmarks): Set ```---local_feat True```
 - Only Global(Face)              : Set ```---local_feat False```
 
-###Methods
+### Methods
 - Train only on source data 
   - [resnet_source_train.sh](training/resnet_source_train.sh)  
   - [gcn_source_train.sh](training/gcn_source_train.sh)

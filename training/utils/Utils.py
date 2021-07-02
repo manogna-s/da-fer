@@ -33,10 +33,6 @@ def BuildModel(args):
 
     if args.pretrained:
         model = load_resnet_pretrained_weights(model, numOfLayer)
-        # print('Resume Model: {}'.format(args.pretrained))
-        # checkpoint = torch.load(args.pretrained, map_location='cpu')
-        #
-        # model.load_state_dict(checkpoint, strict=True)
     else:
         print('No Resume Model')
 
@@ -80,15 +76,6 @@ def BuildDataloader(args, flag1='train', flag2='source', max_samples=-1):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
     target_trans = None
-
-    # Basic Notes:
-    # 0: Surprised
-    # 1: Fear
-    # 2: Disgust
-    # 3: Happy
-    # 4: Sad
-    # 5: Angry
-    # 6: Neutral
 
     dataPath_prefix = '../Dataset'
 

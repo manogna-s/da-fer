@@ -1,8 +1,147 @@
+import numpy as np
+import time
 import torch
 import torch.nn as nn
-from torch.nn import Sequential, Conv2d, MaxPool2d, BatchNorm2d, ReLU
+from sklearn.cluster import KMeans
 
-import numpy as np
+
+def Initialize_Mean(args, source_data_loader, target_data_loader, model, useClassify=True):
+    model.eval()
+
+    # Source Mean
+    mean = None
+
+    for step, (input, landmark, label) in enumerate(source_data_loader):
+        input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
+        with torch.no_grad():
+            feature, pred, loc_pred = model(input, landmark, useClassify, 'Source')
+
+        if step == 0:
+            mean = torch.mean(feature, 0)
+        else:
+            mean = step / (step + 1) * torch.mean(feature, 0) + 1 / (step + 1) * mean
+
+    if isinstance(model, nn.DataParallel):
+        model.module.SourceMean.init(mean)
+    else:
+        model.SourceMean.init(mean)
+
+    # Target Mean
+    mean = None
+
+    for step, (input, landmark, label) in enumerate(target_data_loader):
+        input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
+        with torch.no_grad():
+            feature, pred, loc_pred = model(input, landmark, useClassify, 'Target')
+
+        if step == 0:
+            mean = torch.mean(feature, 0)
+        else:
+            mean = step / (step + 1) * torch.mean(feature, 0) + 1 / (step + 1) * mean
+
+    if isinstance(model, nn.DataParallel):
+        model.module.TargetMean.init(mean)
+    else:
+        model.TargetMean.init(mean)
+
+
+def Initialize_Mean_Cov(args, source_data_loader, target_data_loader, model, useClassify=True):
+    model.eval()
+
+    # Source Mean and Cov
+    mean, cov = None, None
+
+    for step, (input, landmark, label) in enumerate(source_data_loader):
+        input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
+        with torch.no_grad():
+            feature, pred, loc_pred = model(input, landmark, useClassify, 'Source')
+
+        if step == 0:
+            mean = torch.mean(feature, 0)
+            cov = torch.mm((feature - mean).transpose(0, 1), feature - mean) / (feature.size(0) - 1)
+        else:
+            mean = step / (step + 1) * torch.mean(feature, 0) + 1 / (step + 1) * mean
+            cov = step / (step + 1) * torch.mm((feature - mean).transpose(0, 1), feature - mean) / (
+                    feature.size(0) - 1) + 1 / (step + 1) * cov
+
+    if isinstance(model, nn.DataParallel):
+        model.module.SourceMean.init(mean, cov)
+    else:
+        model.SourceMean.init(mean, cov)
+
+    # Target Mean and Cov
+    mean, cov = None, None
+
+    for step, (input, landmark, label) in enumerate(target_data_loader):
+        input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
+        with torch.no_grad():
+            feature, pred, loc_pred = model(input, landmark, useClassify, 'Target')
+
+        if step == 0:
+            mean = torch.mean(feature, 0)
+            cov = torch.mm((feature - mean).transpose(0, 1), feature - mean) / (feature.size(0) - 1)
+        else:
+            mean = step / (step + 1) * torch.mean(feature, 0) + 1 / (step + 1) * mean
+            cov = step / (step + 1) * torch.mm((feature - mean).transpose(0, 1), feature - mean) / (
+                    feature.size(0) - 1) + 1 / (step + 1) * cov
+
+    if isinstance(model, nn.DataParallel):
+        model.module.TargetMean.init(mean, cov)
+    else:
+        model.TargetMean.init(mean, cov)
+
+
+def Initialize_Mean_Cluster(args, source_data_loader, target_data_loader, model, useClassify=True):
+    model.eval()
+
+    # Source Cluster of Mean
+    Feature = []
+    EndTime = time.time()
+    # source_data_loader = BulidDataloader(args, flag1='train', flag2='source')
+
+    for step, (input, landmark, label) in enumerate(source_data_loader):
+        input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
+        with torch.no_grad():
+            feature, pred, loc_pred = model(input, landmark, useClassify, 'Source')
+        Feature.append(feature.cpu().data.numpy())
+    Feature = np.vstack(Feature)
+
+    # Using K-Means
+    kmeans = KMeans(n_clusters=args.class_num, init='k-means++', algorithm='full')
+    kmeans.fit(Feature)
+    centers = torch.Tensor(kmeans.cluster_centers_).to('cuda' if torch.cuda.is_available else 'cpu')
+
+    if isinstance(model, nn.DataParallel):
+        model.module.SourceMean.init(centers)
+    else:
+        model.SourceMean.init(centers)
+
+    print('[Source Domain] Cost time : %fs' % (time.time() - EndTime))
+
+    # Target Cluster of Mean
+    Feature = []
+    EndTime = time.time()
+    # target_data_loader = BulidDataloader(args, flag1='train', flag2='target', balanced=args.num_balanced)
+
+    for step, (input, landmark, label) in enumerate(target_data_loader):
+        input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
+        with torch.no_grad():
+            feature, pred, loc_pred = model(input, landmark, useClassify, 'Target')
+        Feature.append(feature.cpu().data.numpy())
+    Feature = np.vstack(Feature)
+
+    # Using K-Means
+    kmeans = KMeans(n_clusters=args.class_num, init='k-means++', algorithm='full')
+    kmeans.fit(Feature)
+    centers = torch.Tensor(kmeans.cluster_centers_).to('cuda' if torch.cuda.is_available else 'cpu')
+
+    if isinstance(model, nn.DataParallel):
+        model.module.TargetMean.init(centers)
+    else:
+        model.TargetMean.init(centers)
+
+    print('[Target Domain] Cost time : %fs' % (time.time() - EndTime))
+
 
 class CountMeanOfFeature(nn.Module):
     def __init__(self, num_features, momentum=0.1, track_running_stats=True):
@@ -37,6 +176,7 @@ class CountMeanOfFeature(nn.Module):
 
     def getSample(self, input):
         return self.running_mean.expand(input.size(0), -1)
+
 
 class CountMeanAndCovOfFeature(nn.Module):
     def __init__(self, num_features, momentum=0.1, track_running_stats=True):
@@ -92,6 +232,7 @@ class CountMeanAndCovOfFeature(nn.Module):
             return result
 
         return self.running_mean.expand(input.size(0), -1)
+
 
 class CountMeanOfFeatureInCluster(nn.Module):
     def __init__(self, num_features, class_num=7, momentum=0.1, track_running_stats=True):
@@ -156,3 +297,20 @@ class CountMeanOfFeatureInCluster(nn.Module):
 
         return np.argmin(distance)
 
+
+def init_gcn(args, train_source_dataloader, train_target_dataloader, model):
+    if args.local_feat and not args.isTest:
+        if args.use_cov:
+            print('Init Mean and Cov...')
+            Initialize_Mean_Cov(args, train_source_dataloader, train_target_dataloader, model, useClassify=args.useClassify)
+        else:
+            if args.use_cluster:
+                print('Initialize Mean in Cluster....')
+                Initialize_Mean_Cluster(args, train_source_dataloader, train_target_dataloader, model, useClassify=args.useClassify)
+            else:
+                print('Init Mean...')
+                Initialize_Mean(args, train_source_dataloader, train_target_dataloader, model, useClassify=args.useClassify)
+        torch.cuda.empty_cache()
+        print('Done!')
+        print('================================================')
+    return

@@ -1,16 +1,14 @@
 import torch
 import torch.nn as nn
-from torch.nn import Linear, Conv2d, BatchNorm1d, BatchNorm2d, PReLU, ReLU, Sigmoid, Dropout, MaxPool2d, AdaptiveAvgPool2d, Sequential, Module
-
+from torch.nn import Conv2d, BatchNorm1d, BatchNorm2d, PReLU, Sequential
 import copy
-import numpy as np
-from collections import namedtuple
 
-from models.GraphConvolutionNetwork import GCN, GCNwithIntraAndInterMatrix
-from models.Model import CountMeanOfFeature, CountMeanAndCovOfFeature, CountMeanOfFeatureInCluster
-from models.ResNet_utils import Flatten, l2_norm, SEModule, bottleneck_IR, bottleneck_IR_SE, Bottleneck, get_block, get_blocks, init_weights
-# Support: ['IR_18', 'IR_50', 'IR_101', 'IR_152', 'IR_SE_50', 'IR_SE_101', 'IR_SE_152']
+from models.GraphConvolutionNetwork import GCNwithIntraAndInterMatrix
+from models.GCN_utils import CountMeanOfFeature, CountMeanAndCovOfFeature, CountMeanOfFeatureInCluster
+from models.ResNet_utils import bottleneck_IR, get_block, get_blocks, init_weights
 
+
+# Support: ['IR_18', 'IR_50']
 class Backbone_GCN(nn.Module):
     def __init__(self, numOfLayer, useIntraGCN=True, useInterGCN=True, useRandomMatrix=False, useAllOneMatrix=False, useCov=False, useCluster=False, class_num = 7):   
 
@@ -52,7 +50,6 @@ class Backbone_GCN(nn.Module):
         self.GAP = nn.AdaptiveAvgPool2d((1,1))
 
         if self.useIntraGCN and self.useInterGCN:
-        #self.GCN = GCN(64, 128, 64)
             self.GCN = GCNwithIntraAndInterMatrix(64, 128, 64, useIntraGCN=useIntraGCN, useInterGCN=useInterGCN, useRandomMatrix=useRandomMatrix, useAllOneMatrix=useAllOneMatrix)
 
             self.SourceMean = (CountMeanAndCovOfFeature(64+320) if useCov else CountMeanOfFeature(64+320)) if not useCluster else CountMeanOfFeatureInCluster(64+320, class_num=class_num)
@@ -190,9 +187,9 @@ class Backbone_GCN(nn.Module):
 
     def get_parameters(self):
         if self.useIntraGCN and self.useInterGCN:
-            parameter_list = [  {"params":self.input_layer.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer1.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer2.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer3.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer4.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.output_layer.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.loc_fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.Crop_Net.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.GCN.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.SourceBN.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.TargetBN.parameters(), "lr_mult":10, 'decay_mult':2}]
+            parameter_list = [{"params":self.input_layer.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer1.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer2.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer3.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer4.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.output_layer.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.loc_fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.Crop_Net.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.GCN.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.SourceBN.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.TargetBN.parameters(), "lr_mult":10, 'decay_mult':2}]
         else:
-            parameter_list = [  {"params":self.input_layer.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer1.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer2.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer3.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer4.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.output_layer.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.loc_fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.Crop_Net.parameters(), "lr_mult":10, 'decay_mult':2}]
+            parameter_list = [{"params":self.input_layer.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer1.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer2.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer3.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.layer4.parameters(), "lr_mult":1, 'decay_mult':2}, {"params":self.output_layer.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.loc_fc.parameters(), "lr_mult":10, 'decay_mult':2}, {"params":self.Crop_Net.parameters(), "lr_mult":10, 'decay_mult':2}]
         return parameter_list
 
     def crop_featureMap(self, featureMap, locations):
@@ -245,81 +242,6 @@ class Backbone_GCN(nn.Module):
 
         return loc_feature
 
-    def __init__(self,numOfLayer, class_num):
-
-        super(Backbone_onlyGlobal, self).__init__()
-
-        unit_module = bottleneck_IR
-        
-        self.input_layer = Sequential(Conv2d(in_channels=3, out_channels=64, kernel_size=(3, 3), stride=(1,1), padding=(1,1), bias=False),BatchNorm2d(64),PReLU(64))
-
-        blocks = get_blocks(numOfLayer)
-        self.layer1 = Sequential(*[unit_module(bottleneck.in_channel,bottleneck.depth,bottleneck.stride) for bottleneck in blocks[0]]) #get_block(in_channel=64, depth=64, num_units=3)])
-        self.layer2 = Sequential(*[unit_module(bottleneck.in_channel,bottleneck.depth,bottleneck.stride) for bottleneck in blocks[1]]) #get_block(in_channel=64, depth=128, num_units=4)])
-        self.layer3 = Sequential(*[unit_module(bottleneck.in_channel,bottleneck.depth,bottleneck.stride) for bottleneck in blocks[2]]) #get_block(in_channel=128, depth=256, num_units=14)])
-        self.layer4 = Sequential(*[unit_module(bottleneck.in_channel,bottleneck.depth,bottleneck.stride) for bottleneck in blocks[3]]) #get_block(in_channel=256, depth=512, num_units=3)])
-
-        self.output_layer = Sequential(nn.Conv2d(in_channels=512, out_channels=64, kernel_size=(3,3), stride=(1,1), padding=(1,1)), 
-                                       nn.ReLU(),
-                                       nn.AdaptiveAvgPool2d((1,1)))
-
-        self.fc = nn.Linear(64, class_num)
-        self.fc.apply(init_weights)
-        
-    def classify(self, imgs, locations):
-
-        featureMap = self.input_layer(imgs)
-
-        featureMap1 = self.layer1(featureMap)  # Batch * 64 * 56 * 56
-        featureMap2 = self.layer2(featureMap1) # Batch * 128 * 28 * 28
-        featureMap3 = self.layer3(featureMap2) # Batch * 256 * 14 * 14
-        featureMap4 = self.layer4(featureMap3) # Batch * 512 * 7 * 7
-
-        feature = self.output_layer(featureMap4).view(featureMap.size(0), -1) # Batch * 64
-
-        pred = self.fc(feature)              # Batch * 7
-        loc_pred = None
-
-        return feature, pred, loc_pred
-
-    def transfer(self, imgs, locations, domain='Target'):
-
-        assert domain in ['Source', 'Target'], 'Parameter domain should be Source or Target.'
-
-        featureMap = self.input_layer(imgs)
-
-        featureMap1 = self.layer1(featureMap)  # Batch * 64 * 56 * 56
-        featureMap2 = self.layer2(featureMap1) # Batch * 128 * 28 * 28
-        featureMap3 = self.layer3(featureMap2) # Batch * 256 * 14 * 14
-        featureMap4 = self.layer4(featureMap3) # Batch * 512 * 7 * 7
-
-        feature = self.output_layer(featureMap4).view(featureMap.size(0), -1)  # Batch * 64
-
-        pred = self.fc(feature)  # Batch * 7
-        loc_pred = None
-
-        return feature, pred, loc_pred
-
-    def forward(self, imgs, locations, flag=True, domain='Target'):
-        
-        if flag:
-            return self.classify(imgs, locations)
-
-        return self.transfer(imgs, locations, domain)
-
-    def output_num(self):
-        return 64
-
-    def get_parameters(self):
-        parameter_list = [  {"params":self.input_layer.parameters(), "lr_mult":1, 'decay_mult':2}, \
-                            {"params":self.layer1.parameters(), "lr_mult":1, 'decay_mult':2}, \
-                            {"params":self.layer2.parameters(), "lr_mult":1, 'decay_mult':2}, \
-                            {"params":self.layer3.parameters(), "lr_mult":1, 'decay_mult':2}, \
-                            {"params":self.layer4.parameters(), "lr_mult":1, 'decay_mult':2}, \
-                            {"params":self.output_layer.parameters(), "lr_mult":10, 'decay_mult':2}, \
-                            {"params":self.fc.parameters(), "lr_mult":10, 'decay_mult':2}, \
-                            ]
-        return parameter_list
 
 def IR_GCN(numOfLayer, useIntraGCN, useInterGCN, useRandomMatrix, useAllOneMatrix, useCov, useCluster, class_num):
     """Constructs a ir-18/ir-50 model."""

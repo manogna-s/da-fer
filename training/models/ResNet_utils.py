@@ -1,20 +1,63 @@
+from collections import namedtuple
+
 import torch
 import torch.nn as nn
-from torch.nn import Linear, Conv2d, BatchNorm1d, BatchNorm2d, PReLU, ReLU, Sigmoid, Dropout, MaxPool2d, AdaptiveAvgPool2d, Sequential, Module
+from torch.nn import Conv2d, BatchNorm2d, PReLU, ReLU, Sigmoid, MaxPool2d, \
+    AdaptiveAvgPool2d, Sequential
 
-import copy
-import numpy as np
-from collections import namedtuple
+
+def load_resnet_pretrained_weights(model, numOfLayer):
+    model_dict = model.state_dict()
+    if numOfLayer == 50:
+        checkpoint = torch.load('./pretrained_models/msceleb_ckpts/backbone_ir50_ms1m_epoch120.pth')
+        indexToLayer = {'0': 'layer1.0.', '1': 'layer1.1.', '2': 'layer1.2.',
+                        '3': 'layer2.0.', '4': 'layer2.1.', '5': 'layer2.2.', '6': 'layer2.3.',
+                        '7': 'layer3.0.', '8': 'layer3.1.', '9': 'layer3.2.', '10': 'layer3.3.', '11': 'layer3.4.',
+                        '12': 'layer3.5.', '13': 'layer3.6.', '14': 'layer3.7.', '15': 'layer3.8.', '16': 'layer3.9.',
+                        '17': 'layer3.10.', '18': 'layer3.11.', '19': 'layer3.12.', '20': 'layer3.13.',
+                        '21': 'layer4.0.', '22': 'layer4.1.', '23': 'layer4.2.'}
+    else:
+        checkpoint = torch.load('./pretrained_models/msceleb_ckpts/backbone_IR_18_HeadFC_Softmax_112_512_1.0_Epoch_156_lfw_112_0.994_X4_112_0.990_agedb_30_112_0.949.pth')
+        indexToLayer = {'0': 'layer1.0.', '1': 'layer1.1.',
+                        '2': 'layer2.0.', '3': 'layer2.1.',
+                        '4': 'layer3.0.', '5': 'layer3.1.',
+                        '6': 'layer4.0.', '7': 'layer4.1.'}
+
+    newCheckpoint = {}
+    for key, value in checkpoint.items():
+        subStr = key.split('.', 2)
+        if subStr[0] == 'body':
+            newKey = indexToLayer[subStr[1]] + subStr[2]
+            newCheckpoint[newKey] = value
+        elif subStr[0] == 'output_layer':
+            continue
+        else:
+            newCheckpoint[key] = value
+
+    for key, value in model_dict.items():
+        subStr = key.split('.', 2)
+        if subStr[0] == 'fc' or subStr[0] == 'loc_fc' or \
+                subStr[0] == 'Crop_Net' or subStr[0] == 'GCN' or \
+                subStr[0] == 'SourceMean' or subStr[0] == 'TargetMean' or \
+                subStr[0] == 'SourceBN' or subStr[0] == 'TargetBN' or \
+                subStr[0] == 'output_layer':
+            newCheckpoint[key] = value
+
+    model.load_state_dict(newCheckpoint)
+    return model
+
 
 class Flatten(nn.Module):
     def forward(self, input):
         return input.view(input.size(0), -1)
+
 
 def l2_norm(input, axis=1):
     norm = torch.norm(input, 2, axis, True)
     output = torch.div(input, norm)
 
     return output
+
 
 class SEModule(nn.Module):
     def __init__(self, channels, reduction):
@@ -41,6 +84,7 @@ class SEModule(nn.Module):
 
         return module_input * x
 
+
 class bottleneck_IR(nn.Module):
     def __init__(self, in_channel, depth, stride):
         super(bottleneck_IR, self).__init__()
@@ -59,6 +103,7 @@ class bottleneck_IR(nn.Module):
         res = self.res_layer(x)
 
         return res + shortcut
+
 
 class bottleneck_IR_SE(nn.Module):
     def __init__(self, in_channel, depth, stride):
@@ -84,19 +129,21 @@ class bottleneck_IR_SE(nn.Module):
 
         return res + shortcut
 
+
 class Bottleneck(namedtuple('Block', ['in_channel', 'depth', 'stride'])):
     '''A named tuple describing a ResNet block.'''
 
-def get_block(in_channel, depth, num_units, stride=2):
 
+def get_block(in_channel, depth, num_units, stride=2):
     return [Bottleneck(in_channel, depth, stride)] + [Bottleneck(depth, depth, 1) for i in range(num_units - 1)]
+
 
 def get_blocks(num_layers):
     if num_layers == 18:
         blocks = [
             get_block(in_channel=64, depth=64, num_units=2),
             get_block(in_channel=64, depth=128, num_units=2),
-            get_block(in_channel=128, depth=256, num_units=2),  
+            get_block(in_channel=128, depth=256, num_units=2),
             get_block(in_channel=256, depth=512, num_units=2)
         ]
     elif num_layers == 50:
@@ -122,6 +169,7 @@ def get_blocks(num_layers):
         ]
 
     return blocks
+
 
 def init_weights(m):
     classname = m.__class__.__name__

@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 from torchvision import models
 
+
 def init_weights(m):
     classname = m.__class__.__name__
     if classname.find('Conv2d') != -1 or classname.find('ConvTranspose2d') != -1:
@@ -18,6 +19,7 @@ def init_weights(m):
     elif classname.find('Linear') != -1:
         nn.init.xavier_normal_(m.weight)
         nn.init.zeros_(m.bias)
+
 
 class RandomLayer(nn.Module):
     def __init__(self, input_dim_list=[], output_dim=1024):
@@ -36,6 +38,7 @@ class RandomLayer(nn.Module):
     def cuda(self):
         super(RandomLayer, self).cuda()
         self.random_matrix = [val.cuda() for val in self.random_matrix]
+
 
 class LRN(nn.Module):
     def __init__(self, local_size=1, alpha=1.0, beta=0.75, ACROSS_CHANNELS=True):
@@ -63,6 +66,7 @@ class LRN(nn.Module):
             div = div.mul(self.alpha).add(1.0).pow(self.beta)
         x = x.div(div)
         return x
+
 
 class AlexNet(nn.Module):
 
@@ -102,6 +106,7 @@ class AlexNet(nn.Module):
         x = self.classifier(x)
         return x
 
+
 def alexnet(pretrained=False, **kwargs):
     r"""AlexNet model architecture from the
     `"One weird trick..." <https://arxiv.org/abs/1404.5997>`_ paper.
@@ -114,6 +119,7 @@ def alexnet(pretrained=False, **kwargs):
         pretrained_model = torch.load(model_path)
         model.load_state_dict(pretrained_model['state_dict'])
     return model
+
 
 # convnet without the last layer
 class AlexNetFc(nn.Module):
@@ -170,7 +176,9 @@ class AlexNetFc(nn.Module):
         parameter_list = [{"params":self.parameters(), "lr_mult":1, 'decay_mult':2}]
     return parameter_list
 
+
 resnet_dict = {"ResNet18":models.resnet18, "ResNet34":models.resnet34, "ResNet50":models.resnet50, "ResNet101":models.resnet101, "ResNet152":models.resnet152}
+
 
 class ResNetFc(nn.Module):
   def __init__(self, resnet_name, use_bottleneck=True, bottleneck_dim=256, new_cls=False, class_num=1000):
@@ -230,7 +238,10 @@ class ResNetFc(nn.Module):
         parameter_list = [{"params":self.parameters(), "lr_mult":1, 'decay_mult':2}]
     return parameter_list
 
+
 vgg_dict = {"VGG11":models.vgg11, "VGG13":models.vgg13, "VGG16":models.vgg16, "VGG19":models.vgg19, "VGG11BN":models.vgg11_bn, "VGG13BN":models.vgg13_bn, "VGG16BN":models.vgg16_bn, "VGG19BN":models.vgg19_bn} 
+
+
 class VGGFc(nn.Module):
   def __init__(self, vgg_name, use_bottleneck=True, bottleneck_dim=256, new_cls=False, class_num=1000):
     super(VGGFc, self).__init__()
@@ -285,6 +296,7 @@ class VGGFc(nn.Module):
         parameter_list = [{"params":self.parameters(), "lr_mult":1, 'decay_mult':2}]
     return parameter_list
 
+
 # For SVHN dataset
 class DTN(nn.Module):
     def __init__(self):
@@ -324,6 +336,7 @@ class DTN(nn.Module):
     def output_num(self):
         return self.__in_features
 
+
 class LeNet(nn.Module):
     def __init__(self):
         super(LeNet, self).__init__()
@@ -352,13 +365,16 @@ class LeNet(nn.Module):
     def output_num(self):
         return self.__in_features
 
+
 def grl_hook(coeff):
     def fun1(grad):
         return - coeff * grad.clone()
     return fun1
 
+
 def calc_coeff(iter_num, high=1.0, low=0.0, alpha=10.0, max_iter=10000.0):
     return np.float(2.0 * (high - low) / (1.0 + np.exp(-alpha*iter_num / max_iter)) - (high - low) + low)
+
 
 class AdversarialNetwork(nn.Module):
   def __init__(self, in_feature, hidden_size):

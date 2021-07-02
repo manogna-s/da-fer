@@ -1,7 +1,8 @@
 from utils.Utils import *
+import time
 
 
-def Test(args, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='Target', split='test', eval_gcn=False):
+def Test(args, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='Target', split='test'):
     """Test."""
 
     print(f'Testing on {domain} {split} set')
@@ -11,10 +12,9 @@ def Test(args, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='
     iter_dataloader = iter(dataloader)
 
     # Test on Source Domain
-    acc, prec, recall = [AverageMeter() for i in range(args.class_num)], [AverageMeter() for i in
-                                                                          range(args.class_num)], [AverageMeter() for i
-                                                                                                   in range(
-            args.class_num)]
+    acc, prec, recall = [AverageMeter() for i in range(args.class_num)], \
+                        [AverageMeter() for i in range(args.class_num)], \
+                        [AverageMeter() for i in range(args.class_num)]
     loss, data_time, batch_time = AverageMeter(), AverageMeter(), AverageMeter()
 
     end = time.time()
@@ -25,8 +25,8 @@ def Test(args, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='
 
         with torch.no_grad():
             end = time.time()
-            if eval_gcn:
-                feature, output, loc_output = model(input, landmark, useClassify=False, domain=domain)
+            if args.use_gcn:
+                feature, output, loc_output = model(input, landmark, useClassify=args.useClassify, domain=domain)
             else:
                 feature, output, loc_output = model(input, landmark)
             batch_time.update(time.time() - end)

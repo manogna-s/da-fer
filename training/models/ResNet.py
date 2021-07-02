@@ -1,14 +1,11 @@
 import copy
-
 import torch
 import torch.nn as nn
 from torch.nn import Conv2d, BatchNorm2d, PReLU, Sequential
-
 from models.ResNet_utils import bottleneck_IR, get_block, get_blocks, init_weights
 
 
-# Support: ['IR_18', 'IR_50', 'IR_101', 'IR_152', 'IR_SE_50', 'IR_SE_101', 'IR_SE_152']
-
+# Support: ['IR_18', 'IR_50']
 class Backbone_Global_Local(nn.Module):
     def __init__(self, numOfLayer, class_num=7):
 

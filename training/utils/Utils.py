@@ -7,7 +7,7 @@ from PIL import Image
 from models.AdversarialNetwork import RandomLayer, AdversarialNetwork
 from models.ResNet import IR_global_local, IR_global
 from models.ResNet_GCN import IR_GCN
-from models.ResNet_MCD import IR_global_local_MCD, IR_global_MCD
+from models.ResNet_feat import IR_global_local_feat
 from models.ResNet_utils import load_resnet_pretrained_weights
 from utils.Dataset import MyDataset
 from utils.misc_utils import *
@@ -28,9 +28,9 @@ def BuildModel(args):
                        args.use_cluster, args.class_num)
     elif args.use_mcd:
         if args.local_feat:
-            model = IR_global_local_MCD(numOfLayer)
+            model = IR_global_local_feat(numOfLayer)
         else:
-            model = IR_global_MCD(numOfLayer)
+            print('MCD with only global feat not yet added')
     else:
         if args.local_feat:
             model = IR_global_local(numOfLayer, args.class_num)
@@ -38,11 +38,8 @@ def BuildModel(args):
             model = IR_global(numOfLayer, args.class_num)
 
     if args.pretrained:
+        print('Loading MSCeleb pretrained weights')
         model = load_resnet_pretrained_weights(model, numOfLayer)
-        # print('Resume Model: {}'.format(args.pretrained))
-        # checkpoint = torch.load(args.pretrained, map_location='cpu')
-        #
-        # model.load_state_dict(checkpoint, strict=True)
     else:
         print('No Resume Model')
 

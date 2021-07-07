@@ -165,6 +165,11 @@ def Show_Accuracy(acc, prec, recall, class_num=7):
         Accuracy_Info += ' {:.4f}'.format(f1[i].avg)
     Accuracy_Info += '\n'
 
+    LoggerInfo = Accuracy_Info
+    LoggerInfo += '''    Acc_avg {0:.4f} Prec_avg {1:.4f} Recall_avg {2:.4f} F1_avg {3:.4f}''' \
+        .format(acc_avg, prec_avg, recall_avg, f1_avg)
+    print(LoggerInfo)
+
     return Accuracy_Info, acc_avg, prec_avg, recall_avg, f1_avg
 
 

@@ -114,6 +114,9 @@ def print_experiment_info(args):
         if args.use_mme:
             print('Using MME for domain adaptation')
 
+        if args.use_mcd:
+            print('Using MCD for domain adaptation')
+
     print('================================================')
 
     print('Number of classes : %d' % args.class_num)
@@ -179,8 +182,10 @@ def train_setup(args):
 
     writer = SummaryWriter(os.path.join(args.out, args.log))
 
-    #save arguments used
+    # save arguments used
     with open(os.path.join(args.out,'args.txt'), 'w') as f:
         json.dump(args.__dict__, f, indent=2)
+
+    os.makedirs(os.path.join(args.out, 'ckpts'), exist_ok=True)
 
     return dataloaders, model, optimizer, writer

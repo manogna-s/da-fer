@@ -15,16 +15,17 @@ class GradReverse(Function):
     def backward(self, grad_output):
         return (grad_output * -1.0)
 
+
 def grad_reverse(x):
     return GradReverse().apply(x)
 
 
 class ResClassifier(nn.Module):
-    def __init__(self, num_classes=7,num_layer = 2,num_unit=384,prob=0.5,middle=100):
+    def __init__(self, num_classes=7,num_layer=2,num_unit=384,prob=0.5,middle=100):
         super(ResClassifier, self).__init__()
         layers = []
         if num_layer == 1:
-            layers.append(nn.Linear(num_unit,num_classes))
+            layers.append(nn.Linear(num_unit, num_classes))
         
         if num_layer > 1:
             layers.append(nn.Dropout(p=prob))
@@ -43,17 +44,19 @@ class ResClassifier(nn.Module):
 
     def set_lambda(self, lambd):
         self.lambd = lambd
-    def forward(self, x,reverse=False):
+
+    def forward(self, x, reverse=False):
         if reverse:
             x = grad_reverse(x)
         x = self.classifier(x)
         return x
 
+
 # Support: ['IR_18', 'IR_50']
-class Backbone_Global_Local_MCD(nn.Module):
+class Backbone_Global_Local_feat(nn.Module):
     def __init__(self, numOfLayer):
 
-        super(Backbone_Global_Local_MCD, self).__init__()
+        super(Backbone_Global_Local_feat, self).__init__()
 
         unit_module = bottleneck_IR
 
@@ -92,11 +95,6 @@ class Backbone_Global_Local_MCD(nn.Module):
         cropNet_modules += [
             nn.Conv2d(in_channels=512, out_channels=64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)), nn.ReLU()]
         self.Crop_Net = nn.ModuleList([copy.deepcopy(nn.Sequential(*cropNet_modules)) for i in range(5)])
-        # self.fc = nn.Linear(64 + 320, class_num)
-        # self.fc.apply(init_weights)
-
-        # self.loc_fc = nn.Linear(320, class_num)
-        # self.loc_fc.apply(init_weights)
         self.GAP = nn.AdaptiveAvgPool2d((1, 1))
 
     def classify(self, imgs, locations):
@@ -113,11 +111,6 @@ class Backbone_Global_Local_MCD(nn.Module):
         feature = torch.cat((global_feature, loc_feature), 1)  # Batch * (64+320)
 
         feature = feature.view(feature.size(0), -1).narrow(1, 0, 64 + 320)  # Batch * (64+320)
-        # loc_feature = feature.narrow(1, 64, 320)  # Batch * 320
-
-        # pred = self.fc(feature)  # Batch * class_num
-        # loc_pred = self.loc_fc(loc_feature)  # Batch * class_num
-
         return feature
 
     def forward(self, imgs, locations, useClassify=True):
@@ -134,8 +127,6 @@ class Backbone_Global_Local_MCD(nn.Module):
                           {"params": self.layer3.parameters(), "lr_mult": 1, 'decay_mult': 2},
                           {"params": self.layer4.parameters(), "lr_mult": 1, 'decay_mult': 2},
                           {"params": self.output_layer.parameters(), "lr_mult": 10, 'decay_mult': 2},
-                        #   {"params": self.fc.parameters(), "lr_mult": 10, 'decay_mult': 2},
-                        #   {"params": self.loc_fc.parameters(), "lr_mult": 10, 'decay_mult': 2},
                           {"params": self.Crop_Net.parameters(), "lr_mult": 10, 'decay_mult': 2}]
         return parameter_list
 
@@ -192,82 +183,9 @@ class Backbone_Global_Local_MCD(nn.Module):
         return loc_feature
 
 
-class Backbone_onlyGlobal_MCD(nn.Module):
-    def __init__(self, numOfLayer):
-        super(Backbone_onlyGlobal_MCD, self).__init__()
-
-        unit_module = bottleneck_IR
-
-        self.input_layer = Sequential(
-            Conv2d(in_channels=3, out_channels=64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False),
-            BatchNorm2d(64), PReLU(64))
-
-        blocks = get_blocks(numOfLayer)
-        self.layer1 = Sequential(
-            *[unit_module(bottleneck.in_channel, bottleneck.depth, bottleneck.stride) for bottleneck in
-              blocks[0]])  # get_block(in_channel=64, depth=64, num_units=3)])
-        self.layer2 = Sequential(
-            *[unit_module(bottleneck.in_channel, bottleneck.depth, bottleneck.stride) for bottleneck in
-              blocks[1]])  # get_block(in_channel=64, depth=128, num_units=4)])
-        self.layer3 = Sequential(
-            *[unit_module(bottleneck.in_channel, bottleneck.depth, bottleneck.stride) for bottleneck in
-              blocks[2]])  # get_block(in_channel=128, depth=256, num_units=14)])
-        self.layer4 = Sequential(
-            *[unit_module(bottleneck.in_channel, bottleneck.depth, bottleneck.stride) for bottleneck in
-              blocks[3]])  # get_block(in_channel=256, depth=512, num_units=3)])
-
-        self.output_layer = Sequential(
-            nn.Conv2d(in_channels=512, out_channels=64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool2d((1, 1)))
-
-        self.fc = nn.Linear(64, class_num)
-        self.fc.apply(init_weights)
-
-    def classify(self, imgs):
-        featureMap = self.input_layer(imgs)
-
-        featureMap1 = self.layer1(featureMap)  # Batch * 64 * 56 * 56
-        featureMap2 = self.layer2(featureMap1)  # Batch * 128 * 28 * 28
-        featureMap3 = self.layer3(featureMap2)  # Batch * 256 * 14 * 14
-        featureMap4 = self.layer4(featureMap3)  # Batch * 512 * 7 * 7
-
-        feature = self.output_layer(featureMap4).view(featureMap.size(0), -1)  # Batch * 64
-
-        pred = self.fc(feature)  # Batch * 7
-        loc_pred = None
-
-        return feature, pred, loc_pred
-
-    def forward(self, imgs, locations):
-        return self.classify(imgs)
-
-    def output_num(self):
-        return 64
-
-    def get_parameters(self):
-        parameter_list = [{"params": self.input_layer.parameters(), "lr_mult": 1, 'decay_mult': 2},
-                          {"params": self.layer1.parameters(), "lr_mult": 1, 'decay_mult': 2},
-                          {"params": self.layer2.parameters(), "lr_mult": 1, 'decay_mult': 2},
-                          {"params": self.layer3.parameters(), "lr_mult": 1, 'decay_mult': 2},
-                          {"params": self.layer4.parameters(), "lr_mult": 1, 'decay_mult': 2},
-                          {"params": self.output_layer.parameters(), "lr_mult": 10, 'decay_mult': 2},
-                          {"params": self.fc.parameters(), "lr_mult": 10, 'decay_mult': 2},
-                          ]
-        return parameter_list
-
-
-def IR_global_local_MCD(numOfLayer):
+def IR_global_local_feat(numOfLayer):
     """Constructs a ir-18/ir-50 model."""
 
-    model = Backbone_Global_Local_MCD(numOfLayer)
-
-    return model
-
-
-def IR_global_MCD(numOfLayer):
-    """Constructs a ir-18/ir-50 model."""
-
-    model = Backbone_onlyGlobal_MCD(numOfLayer)
+    model = Backbone_Global_Local_feat(numOfLayer)
 
     return model

@@ -1,7 +1,7 @@
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from models.ResNet_feat import ResClassifier
+from models.ResNet_feat import ResClassifier, StochasticClassifier
 from train_setup import *
 
 criterion = nn.CrossEntropyLoss()
@@ -75,7 +75,7 @@ def Train_MCD_grl(args, G, F1, F2, train_source_dataloader, train_target_dataloa
         target1 = label_source
         loss1 = criterion(output_s1, target1)
         loss2 = criterion(output_s2, target1)
-        all_loss = loss1 + loss2 + 0.0 * entropy_loss
+        all_loss = loss1 + loss2 + 0.01 * entropy_loss
 
         all_loss.backward(retain_graph=True)
         optimizer_g.step()
@@ -293,9 +293,12 @@ def main():
     print_experiment_info(args)
 
     dataloaders, G, optimizer_g, writer = train_setup(args)
-
-    F1 = ResClassifier(num_layer=1)
-    F2 = ResClassifier(num_layer=1)
+    if args.use_stoch_cls:
+        F1 = StochasticClassifier(num_classes=args.class_num)
+        F2 = StochasticClassifier(num_classes=args.class_num)
+    else:
+        F1 = ResClassifier(num_classes=args.class_num, num_layer=1)
+        F2 = ResClassifier(num_classes=args.class_num, num_layer=1)
     F1.cuda()
     F2.cuda()
     optimizer_f = optim.SGD(list(F1.parameters()) + list(F2.parameters()), momentum=0.9, lr=0.001, weight_decay=0.0005)

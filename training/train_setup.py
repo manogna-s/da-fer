@@ -37,6 +37,7 @@ parser.add_argument('--use_mme', type=str2bool, default=False, help='whether to 
 # MCD
 parser.add_argument('--use_mcd', type=str2bool, default=False, help='whether to use MCD')
 parser.add_argument('--use_grl', type=str2bool, default=False, help='whether to use one step grl')
+parser.add_argument('--use_stoch_cls', type=str2bool, default=False, help='whether to use stochastic classifier')
 
 # Feature norm based DA methods
 parser.add_argument('--use_afn', type=str2bool, default=False, help='whether to use AFN Loss')

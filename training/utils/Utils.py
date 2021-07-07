@@ -7,6 +7,7 @@ from PIL import Image
 from models.AdversarialNetwork import RandomLayer, AdversarialNetwork
 from models.ResNet import IR_global_local, IR_global
 from models.ResNet_GCN import IR_GCN
+from models.ResNet_MCD import IR_global_local_MCD, IR_global_MCD
 from models.ResNet_utils import load_resnet_pretrained_weights
 from utils.Dataset import MyDataset
 from utils.misc_utils import *
@@ -25,6 +26,11 @@ def BuildModel(args):
     if args.use_gcn:
         model = IR_GCN(numOfLayer, args.intra_gcn, args.inter_gcn, args.rand_mat, args.all1_mat, args.use_cov,
                        args.use_cluster, args.class_num)
+    elif args.use_mcd:
+        if args.local_feat:
+            model = IR_global_local_MCD(numOfLayer)
+        else:
+            model = IR_global_MCD(numOfLayer)
     else:
         if args.local_feat:
             model = IR_global_local(numOfLayer, args.class_num)
@@ -33,6 +39,10 @@ def BuildModel(args):
 
     if args.pretrained:
         model = load_resnet_pretrained_weights(model, numOfLayer)
+        # print('Resume Model: {}'.format(args.pretrained))
+        # checkpoint = torch.load(args.pretrained, map_location='cpu')
+        #
+        # model.load_state_dict(checkpoint, strict=True)
     else:
         print('No Resume Model')
 
@@ -76,6 +86,15 @@ def BuildDataloader(args, flag1='train', flag2='source', max_samples=-1):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
     target_trans = None
+
+    # Basic Notes:
+    # 0: Surprised
+    # 1: Fear
+    # 2: Disgust
+    # 3: Happy
+    # 4: Sad
+    # 5: Angry
+    # 6: Neutral
 
     dataPath_prefix = '../Dataset'
 

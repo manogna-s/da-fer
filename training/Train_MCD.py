@@ -81,17 +81,15 @@ def Train_MCD_grl(args, G, F1, F2, train_source_dataloader, train_target_dataloa
         optimizer_g.step()
         optimizer_f.step()
 
-        # Step B train classifier to maximize discrepancy
+        # Step B and C using grl: min max discrepancy
         optimizer_g.zero_grad()
         optimizer_f.zero_grad()
 
-        for i in range(num_k):
-            optimizer_g.zero_grad()
-            optimizer_f.zero_grad()
+        for i in range(1):
             feat_t = G(data_target, landmark_target)
             output_t1 = F1(feat_t, reverse=True)
             output_t2 = F2(feat_t, reverse=True)
-            loss_dis = -torch.mean(torch.abs(output_t1 - output_t2))
+            loss_dis = -torch.mean(torch.abs(F.softmax(output_t1) - F.softmax(output_t2)))
             loss_dis.backward()
             optimizer_f.step()
             optimizer_g.step()
@@ -108,13 +106,11 @@ def Train_MCD_grl(args, G, F1, F2, train_source_dataloader, train_target_dataloa
         m_loss_dis.update(float(loss_dis.cpu().data.item()))
         m_entropy_loss.update(float(entropy_loss.cpu().data.item()))
 
-    LoggerInfo = '''
-    [Train source]:
-    Epoch {0}
+    LoggerInfo = '''Epoch {0}
     Learning Rate {1}\n
     '''.format(epoch, args.lr)
 
-    LoggerInfo += '''    Total Loss {loss:.4f} Cls1 Loss {loss1:.4f} Cls2 Loss {loss2:.4f} Discrepancy Loss {dis_loss:.4f} Entropy loss {ent_loss}''' \
+    LoggerInfo += '''Total Loss {loss:.4f} Cls1 Loss {loss1:.4f} Cls2 Loss {loss2:.4f} Discrepancy Loss {dis_loss:.4f} Entropy loss {ent_loss}''' \
         .format(loss=m_total_loss.avg, loss1=m_loss1.avg, loss2=m_loss2.avg, dis_loss=m_loss_dis.avg,
                 ent_loss=m_entropy_loss.avg)
 
@@ -307,7 +303,11 @@ def main():
     # Running Experiment
     print("Run Experiment...")
     for epoch in range(1, args.epochs + 1):
-        Train_MCD(args, G, F1, F2, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
+        if args.use_grl:
+            Train_MCD_grl(args, G, F1, F2, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
+                  epoch, writer)
+        else:
+            Train_MCD(args, G, F1, F2, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
                   epoch, writer)
         print('\nEvaluation ...')
         Test_MCD(args, G, F1, F2, dataloaders, splits=['train_source', 'train_target', 'test_source', 'test_target'])

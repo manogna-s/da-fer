@@ -34,6 +34,10 @@ parser.add_argument('--dan_method', type=str, default='CDAN-E', choices=['CDAN',
 # MME
 parser.add_argument('--use_mme', type=str2bool, default=False, help='whether to use MME loss')
 
+# MCD
+parser.add_argument('--use_mcd', type=str2bool, default=False, help='whether to use MCD')
+parser.add_argument('--use_grl', type=str2bool, default=False, help='whether to use one step grl')
+
 # Feature norm based DA methods
 parser.add_argument('--use_afn', type=str2bool, default=False, help='whether to use AFN Loss')
 parser.add_argument('--afn_method', type=str, default='SAFN', choices=['HAFN', 'SAFN'])

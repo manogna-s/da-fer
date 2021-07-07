@@ -8,7 +8,7 @@ saveCheckPoint='False'
 
 OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 CUDA_VISIBLE_DEVICES=$1 nohup python Train_MCD.py  \
 --use_mcd True \
---log $2  \
+--log summary_logs  \
 --out ./exp_logs/$2 \
 --local_feat ${useLocalFeature} \
 --pretrained True \
@@ -18,4 +18,4 @@ OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 CUDA_VISIBLE_DEVICES=$1 nohup python Train
 --save_checkpoint ${saveCheckPoint} \
 --source_labeled ${n_source_train} \
 --target_unlabeled ${n_target_train} \
---train_batch 32 >./exp_logs/jaffe_mcdv2_training_log.txt
+--train_batch 32 >./exp_logs/$2_training_log.txt

@@ -52,6 +52,33 @@ class ResClassifier(nn.Module):
         return x
 
 
+class StochasticClassifier(nn.Module):
+    def __init__(self, num_classes=7, input_dim=384, hidden=100):
+        super(StochasticClassifier, self).__init__()
+
+        self.fc = nn.Linear(input_dim, hidden)
+        self.fc_mu = nn.Linear(hidden, num_classes)
+        self.fc_logvar = nn.Linear(hidden, num_classes)
+
+        self.fc.apply(init_weights)
+        self.fc_mu.apply(init_weights)
+        self.fc_logvar.apply(init_weights)
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def forward(self, x, reverse=False):
+        if reverse:
+            x = grad_reverse(x)
+        x = self.fc(x)
+        mu = self.fc_mu(x)
+        logvar = self.fc_logvar(x)
+        out = self.reparameterize(mu, logvar)
+        return out
+
+
 # Support: ['IR_18', 'IR_50']
 class Backbone_Global_Local_feat(nn.Module):
     def __init__(self, numOfLayer):

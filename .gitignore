@@ -142,4 +142,4 @@ Dataset/
 *.pkl
 training/ResNet50_CropNet_withoutAFN_trainOnSourceDomain_RAFtoCK+.pkl
 training/ResNet50_CropNet_withoutAFN_trainOnSourceDomain_RAFtoCK+/
-
+training/exp_logs/

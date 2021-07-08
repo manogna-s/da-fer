@@ -1,7 +1,7 @@
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from models.ResNet_feat import ResClassifier
+from models.ResNet_feat import StochasticClassifier
 from train_setup import *
 
 criterion = nn.CrossEntropyLoss()
@@ -9,12 +9,12 @@ eta = 1.0
 num_k = 4
 
 
-def Train_MCD_grl(args, G, F1, F2, train_source_dataloader, train_target_dataloader, optimizer_g, optimizer_f,
+def Train_STAR_grl(args, G, F_cls, train_source_dataloader, train_target_dataloader, optimizer_g, optimizer_f,
                       epoch, writer):
     """Train."""
     G.train()
-    F1.train()
-    F2.train()
+    F_cls.train()
+    F_cls.train()
     torch.autograd.set_detect_anomaly(True)
     batch_size = args.train_batch
 
@@ -51,8 +51,8 @@ def Train_MCD_grl(args, G, F1, F2, train_source_dataloader, train_target_dataloa
         label_source = Variable(label_source)
 
         output = G(data, landmark)
-        output1 = F1(output)
-        output2 = F2(output)
+        output1 = F_cls(output)
+        output2 = F_cls(output)
 
         output_s1 = output1[:batch_size, :]
         output_s2 = output2[:batch_size, :]
@@ -79,8 +79,8 @@ def Train_MCD_grl(args, G, F1, F2, train_source_dataloader, train_target_dataloa
 
         for i in range(1):
             feat_t = G(data_target, landmark_target)
-            output_t1 = F1(feat_t, reverse=True)
-            output_t2 = F2(feat_t, reverse=True)
+            output_t1 = F_cls(feat_t, reverse=True)
+            output_t2 = F_cls(feat_t, reverse=True)
             loss_dis = -torch.mean(torch.abs(F.softmax(output_t1) - F.softmax(output_t2)))
             loss_dis.backward()
             optimizer_f.step()
@@ -111,12 +111,11 @@ def Train_MCD_grl(args, G, F1, F2, train_source_dataloader, train_target_dataloa
     return
 
 
-def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader, optimizer_g, optimizer_f, epoch,
+def Train_STAR(args, G, F_cls, train_source_dataloader, train_target_dataloader, optimizer_g, optimizer_f, epoch,
               writer):
     """Train."""
     G.train()
-    F1.train()
-    F2.train()
+    F_cls.train()
     torch.autograd.set_detect_anomaly(True)
     batch_size = args.train_batch
 
@@ -152,8 +151,8 @@ def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader,
         label_source = Variable(label_source)
 
         output = G(data, landmark)
-        output1 = F1(output)
-        output2 = F2(output)
+        output1 = F_cls(output)
+        output2 = F_cls(output)
 
         output_s1 = output1[:batch_size, :]
         output_s2 = output2[:batch_size, :]
@@ -178,8 +177,8 @@ def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader,
         optimizer_f.zero_grad()
 
         output = G(data, landmark)
-        output1 = F1(output)
-        output2 = F2(output)
+        output1 = F_cls(output)
+        output2 = F_cls(output)
         output_s1 = output1[:batch_size, :]
         output_s2 = output2[:batch_size, :]
         output_t1 = output1[batch_size:, :]
@@ -198,8 +197,8 @@ def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader,
         for i in range(num_k):
             optimizer_g.zero_grad()
             output = G(data, landmark)
-            output1 = F1(output)
-            output2 = F2(output)
+            output1 = F_cls(output)
+            output2 = F_cls(output)
 
             output_s1 = output1[:batch_size, :]
             output_s2 = output2[:batch_size, :]
@@ -244,35 +243,26 @@ def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader,
     return
 
 
-def Test_MCD(args, G, F1, F2, dataloaders, splits=None):
+def Test_STAR(args, G, F_cls, dataloaders, splits=None):
     if splits is None:  # evaluate on test splits by default
         splits = ['test_source', 'test_target']
     G.eval()
-    F1.eval()
-    F2.eval()
+    F_cls.eval()
     for split in splits:
         print(f'\n[{split}]')
         iter_dataloader = iter(dataloaders[split])
         acc1, prec1, recall1 = [AverageMeter() for i in range(args.class_num)], \
                                [AverageMeter() for i in range(args.class_num)], \
                                [AverageMeter() for i in range(args.class_num)]
-        acc2, prec2, recall2 = [AverageMeter() for i in range(args.class_num)], \
-                               [AverageMeter() for i in range(args.class_num)], \
-                               [AverageMeter() for i in range(args.class_num)]
         for batch_index, (input, landmark, label) in enumerate(iter_dataloader):
             input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
             with torch.no_grad():
                 feat = G(input, landmark)
-                output1 = F1(feat)
-                output2 = F2(feat)
+                output1 = F_cls(feat)
+
             Compute_Accuracy(args, output1, label, acc1, prec1, recall1)
-            Compute_Accuracy(args, output2, label, acc2, prec2, recall2)
 
-        print('Classifier 1')
         AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc1, prec1, recall1, args.class_num)
-
-        print('Classifier 2')
-        AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc2, prec2, recall2, args.class_num)
     return
 
 
@@ -286,12 +276,10 @@ def main():
     dataloaders, G, optimizer_g, writer = train_setup(args)
     optimizer_g, lr = lr_scheduler_withoutDecay(optimizer_g, lr=args.lr)
     scheduler_g = optim.lr_scheduler.StepLR(optimizer_g, step_size=20, gamma=0.1, verbose=True)
-    
-    F1 = ResClassifier(num_classes=args.class_num, num_layer=1)
-    F2 = ResClassifier(num_classes=args.class_num, num_layer=1)
-    F1.cuda()
-    F2.cuda()
-    optimizer_f = optim.SGD(list(F1.parameters()) + list(F2.parameters()), momentum=0.9, lr=0.001, weight_decay=0.0005)
+
+    F_cls = StochasticClassifier(num_classes=args.class_num)
+    F_cls.cuda()
+    optimizer_f = optim.SGD(F_cls.parameters(), momentum=0.9, lr=0.001, weight_decay=0.0005)
     scheduler_f = optim.lr_scheduler.StepLR(optimizer_f, step_size=20, gamma=0.1, verbose=True)
 
     # Running Experiment
@@ -299,19 +287,18 @@ def main():
     for epoch in range(1, args.epochs + 1):
         print(f'Epoch : {epoch}')
         if args.use_grl:
-            Train_MCD_grl(args, G, F1, F2, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
+            Train_STAR_grl(args, G, F, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
                   epoch, writer)
         else:
-            Train_MCD(args, G, F1, F2, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
+            Train_STAR(args, G, F, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
                   epoch, writer)
         scheduler_g.step()
         scheduler_f.step()
         print('\nEvaluation ...')
-        Test_MCD(args, G, F1, F2, dataloaders, splits=['train_source', 'train_target', 'test_source', 'test_target'])
+        Test_STAR(args, G, F, dataloaders, splits=['train_source', 'train_target', 'test_source', 'test_target'])
         if args.save_checkpoint:
-            torch.save(G.state_dict(), os.path.join(args.out, f'{args.log}_G_{epoch}.pkl'))
-            torch.save(F1.state_dict(), os.path.join(args.out, f'{args.log}_F1_{epoch}.pkl'))
-            torch.save(F2.state_dict(), os.path.join(args.out, f'{args.log}_F2_{epoch}.pkl'))
+            torch.save(G.state_dict(), os.path.join(args.out, f'star_G_{epoch}.pkl'))
+            torch.save(F_cls.state_dict(), os.path.join(args.out, f'star_F_{epoch}.pkl'))
     writer.close()
 
 

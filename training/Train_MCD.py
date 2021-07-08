@@ -28,6 +28,9 @@ def Train_MCD_grl(args, G, F1, F2, train_source_dataloader, train_target_dataloa
     else:
         args.lr = 0.00001
 
+    #optimizer_g, lr = lr_scheduler_withoutDecay(optimizer_g, lr=args.lr)
+    #optimizer_f, lr = lr_scheduler_withoutDecay(optimizer_f, lr=args.lr)
+    
     # Get Source/Target Dataloader iterator
     iter_source_dataloader = iter(train_source_dataloader)
     iter_target_dataloader = iter(train_target_dataloader)
@@ -293,25 +296,28 @@ def main():
     print_experiment_info(args)
 
     dataloaders, G, optimizer_g, writer = train_setup(args)
-    if args.use_stoch_cls:
-        F1 = StochasticClassifier(num_classes=args.class_num)
-        F2 = StochasticClassifier(num_classes=args.class_num)
-    else:
-        F1 = ResClassifier(num_classes=args.class_num, num_layer=1)
-        F2 = ResClassifier(num_classes=args.class_num, num_layer=1)
+    optimizer, lr = lr_scheduler_withoutDecay(optimizer, lr=args.lr)
+    scheduler_g = optim.lr_scheduler.StepLR(optimizer_g, step_size=20, gamma=0.1, verbose=True)
+    
+    F1 = ResClassifier(num_classes=args.class_num, num_layer=1)
+    F2 = ResClassifier(num_classes=args.class_num, num_layer=1)
     F1.cuda()
     F2.cuda()
     optimizer_f = optim.SGD(list(F1.parameters()) + list(F2.parameters()), momentum=0.9, lr=0.001, weight_decay=0.0005)
+    scheduler_f = optim.lr_scheduler.StepLR(optimizer_f, step_size=20, gamma=0.1, verbose=True)
 
     # Running Experiment
     print("Run Experiment...")
     for epoch in range(1, args.epochs + 1):
+        print(f'Epoch : {epoch}')
         if args.use_grl:
             Train_MCD_grl(args, G, F1, F2, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
                   epoch, writer)
         else:
             Train_MCD(args, G, F1, F2, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
                   epoch, writer)
+        scheduler_g.step()
+        scheduler_f.step()
         print('\nEvaluation ...')
         Test_MCD(args, G, F1, F2, dataloaders, splits=['train_source', 'train_target', 'test_source', 'test_target'])
         if args.save_checkpoint:

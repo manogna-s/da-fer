@@ -57,25 +57,33 @@ class StochasticClassifier(nn.Module):
         super(StochasticClassifier, self).__init__()
 
         self.fc = nn.Linear(input_dim, hidden)
-        self.fc_mu = nn.Linear(hidden, num_classes)
-        self.fc_logvar = nn.Linear(hidden, num_classes)
+        self.weight = torch.zeros((num_classes, hidden))
+        self.bias = torch.zeros(num_classes)
+
+        self.weight_mu = torch.randn_like(self.weight, requires_grad=True)
+        self.weight_logvar = torch.randn_like(self.weight, requires_grad=True)
+
+        self.bias_mu = torch.zeros_like(self.bias, requires_grad=True)
+        self.bias_logvar = torch.randn_like(self.bias, requires_grad=True)
 
         self.fc.apply(init_weights)
-        self.fc_mu.apply(init_weights)
-        self.fc_logvar.apply(init_weights)
 
-    def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5 * logvar)
+    def reparameterize(self):
+        std = torch.exp(0.5 * self.weight_logvar)
         eps = torch.randn_like(std)
-        return mu + eps * std
+        self.weight = self.weight_mu + eps * std
+
+        std = torch.exp(0.5 * self.bias_logvar)
+        eps = torch.randn_like(std)
+        self.bias = self.bias_mu + eps * std
+        return
 
     def forward(self, x, reverse=False):
         if reverse:
             x = grad_reverse(x)
         x = self.fc(x)
-        mu = self.fc_mu(x)
-        logvar = self.fc_logvar(x)
-        out = self.reparameterize(mu, logvar)
+        self.reparameterize()
+        out = F.linear(x, self.weight, self.bias)
         return out
 
 
@@ -148,13 +156,9 @@ class Backbone_Global_Local_feat(nn.Module):
         return 64 * 6
 
     def get_parameters(self):
-        parameter_list = [{"params": self.input_layer.parameters(), "lr_mult": 1, 'decay_mult': 2},
-                          {"params": self.layer1.parameters(), "lr_mult": 1, 'decay_mult': 2},
-                          {"params": self.layer2.parameters(), "lr_mult": 1, 'decay_mult': 2},
-                          {"params": self.layer3.parameters(), "lr_mult": 1, 'decay_mult': 2},
-                          {"params": self.layer4.parameters(), "lr_mult": 1, 'decay_mult': 2},
-                          {"params": self.output_layer.parameters(), "lr_mult": 10, 'decay_mult': 2},
-                          {"params": self.Crop_Net.parameters(), "lr_mult": 10, 'decay_mult': 2}]
+        parameter_list = [{'params':list(self.input_layer.parameters())+list(self.layer1.parameters())+list(self.layer2.parameters())+
+                            list(self.layer3.parameters())+list(self.layer4.parameters()), 'lr_mult':1, 'decay_mult':2},
+                          {'params':list(self.output_layer.parameters())+list(self.Crop_Net.parameters()), 'lr_mult':10, 'decay_mult':2}]
         return parameter_list
 
     def crop_featureMap(self, featureMap, locations):

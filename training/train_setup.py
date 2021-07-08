@@ -180,7 +180,7 @@ def train_setup(args):
     # Set Optimizer
     print('Building Optimizer...')
     param_optim = Set_Param_Optim(args, model)
-    optimizer = Set_Optimizer(args, param_optim, args.lr, args.weight_decay, args.momentum)
+    optimizer = optim.SGD(param_optim, lr=args.lr, weight_decay=args.weight_decay, momentum=args.momentum)
     print('Done!')
 
     print('================================================')

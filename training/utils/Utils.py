@@ -11,7 +11,7 @@ from models.ResNet_feat import IR_global_local_feat
 from models.ResNet_utils import load_resnet_pretrained_weights
 from utils.Dataset import MyDataset
 from utils.misc_utils import *
-
+import json
 
 def BuildModel(args):
     """Bulid Model."""
@@ -26,7 +26,7 @@ def BuildModel(args):
     if args.use_gcn:
         model = IR_GCN(numOfLayer, args.intra_gcn, args.inter_gcn, args.rand_mat, args.all1_mat, args.use_cov,
                        args.use_cluster, args.class_num)
-    elif args.use_mcd:
+    elif args.use_mcd or args.use_star:
         if args.local_feat:
             model = IR_global_local_feat(numOfLayer)
         else:
@@ -70,6 +70,20 @@ def BuildAdversarialNetwork(args, model_output_num, class_num=7):
     return random_layer, ad_net
 
 
+def get_dataset(split='train', domain='RAF'):
+    annotations_file = os.path.join('../Dataset', domain, 'annotations', split+'_annotations.json')
+    with open(annotations_file, 'r') as fp:
+        annotations = json.load(fp)[split]
+
+    df = pd.DataFrame.from_dict(annotations)
+    data = {}
+    data['img_paths']=df['img_path'].tolist()
+    data['bboxs']=df['bbox'].tolist()
+    data['labels']=df['label'].tolist()
+    data['landmarks']=df['landmarks'].tolist()
+    return data
+
+
 def BuildDataloader(args, flag1='train', flag2='source', max_samples=-1):
     """Bulid data loader."""
 
@@ -84,264 +98,15 @@ def BuildDataloader(args, flag1='train', flag2='source', max_samples=-1):
     ])
     target_trans = None
 
-    # Basic Notes:
-    # 0: Surprised
-    # 1: Fear
-    # 2: Disgust
-    # 3: Happy
-    # 4: Sad
-    # 5: Angry
-    # 6: Neutral
-
-    dataPath_prefix = '../Dataset'
-
-    data_imgs, data_labels, data_bboxs, data_landmarks = [], [], [], []
-    if flag1 == 'train':
-        if flag2 == 'source':
-            if args.source == 'RAF':
-                list_patition_label = pd.read_csv(dataPath_prefix + '/%s/lists/image_list.txt' % (args.source),
-                                                  header=None, delim_whitespace=True)
-                list_patition_label = np.array(list_patition_label)
-                n_samples = list_patition_label.shape[0]
-                n_class = {0: 0, 1: 0}
-                if max_samples == -1:
-                    max_samples = n_samples
-                for index in range(n_samples):
-                    if list_patition_label[index, 0][:5] == "train":
-                        if not os.path.exists(
-                                dataPath_prefix + '/%s/boundingbox/' % (args.source) + list_patition_label[index, 0][
-                                                                                       :-4] + '_boundingbox' + '.txt'):
-                            continue
-                        if not os.path.exists(
-                                dataPath_prefix + '/%s/landmarks_5/' % (args.source) + list_patition_label[index, 0][
-                                                                                       :-4] + '.txt'):
-                            continue
-                        bbox = np.loadtxt(
-                            dataPath_prefix + '/%s/boundingbox/' % (args.source) + list_patition_label[index, 0][
-                                                                                   :-4] + '_boundingbox.txt').astype(
-                            np.int)
-                        landmark = np.loadtxt(
-                            dataPath_prefix + '/%s/landmarks_5/' % (args.source) + list_patition_label[index, 0][
-                                                                                   :-3] + 'txt').astype(np.int)
-                        label = list_patition_label[index, 1]
-                        if n_class[label] < max_samples:
-                            data_imgs.append(
-                                dataPath_prefix + '/%s/images/' % (args.source) + list_patition_label[index, 0])
-                            data_labels.append(label)
-                            data_bboxs.append(bbox)
-                            data_landmarks.append(landmark)
-                            n_class[label] += 1
-
-            if args.source == 'RAF_7class':
-                list_patition_label = pd.read_csv(
-                    dataPath_prefix + '/RAF_7class/basic/EmoLabel/list_patition_label.txt', header=None,
-                    delim_whitespace=True)
-                list_patition_label = np.array(list_patition_label)
-                for index in range(list_patition_label.shape[0]):
-                    if list_patition_label[index, 0][:5] == "train":
-                        if not os.path.exists(
-                                dataPath_prefix + '/RAF_7class/basic/Annotation/boundingbox/' + list_patition_label[
-                                                                                                    index, 0][
-                                                                                                :-4] + '_boundingbox' + '.txt'):
-                            continue
-                        if not os.path.exists(
-                                dataPath_prefix + '/RAF_7class/basic/Annotation/Landmarks_5/' + list_patition_label[
-                                                                                                    index, 0][
-                                                                                                :-4] + '.txt'):
-                            continue
-                        bbox = np.loadtxt(
-                            dataPath_prefix + '/RAF_7class/basic/Annotation/boundingbox/' + list_patition_label[
-                                                                                                index, 0][
-                                                                                            :-4] + '_boundingbox.txt').astype(
-                            np.int)
-                        landmark = np.loadtxt(
-                            dataPath_prefix + '/RAF_7class/basic/Annotation/Landmarks_5/' + list_patition_label[
-                                                                                                index, 0][
-                                                                                            :-3] + 'txt').astype(np.int)
-
-                        data_imgs.append(
-                            dataPath_prefix + '/RAF_7class/basic/Image/original/' + list_patition_label[index, 0])
-                        data_labels.append(list_patition_label[index, 1] - 1)
-                        data_bboxs.append(bbox)
-                        data_landmarks.append(landmark)
-
-        if flag2 == 'target':
-            if args.target == 'AISIN':
-                list_patition_label = pd.read_csv(dataPath_prefix + '/%s/lists/image_list.txt' % (args.target),
-                                                  header=None,
-                                                  delim_whitespace=True)
-                list_patition_label = np.array(list_patition_label)
-                n_class = {0: 0, 1: 0}
-                n_samples = list_patition_label.shape[0]
-                if max_samples == -1:
-                    max_samples = n_samples
-                for index in range(n_samples):
-                    if list_patition_label[index, 0][:5] == "train":
-                        if not os.path.exists(
-                                dataPath_prefix + '/%s/landmarks_5/' % (args.target) + list_patition_label[index, 0][
-                                                                                       :-3] + 'txt'):
-                            continue
-                        img = Image.open(
-                            dataPath_prefix + '/%s/images/' % (args.target) + list_patition_label[index, 0]).convert(
-                            'RGB')
-                        ori_img_w, ori_img_h = img.size
-                        landmark = np.loadtxt(
-                            dataPath_prefix + '/%s/landmarks_5/' % (args.target) + list_patition_label[index, 0][
-                                                                                   :-3] + 'txt').astype(np.int)
-                        label = list_patition_label[index, 1]
-                        if n_class[label] < max_samples:
-                            data_imgs.append(
-                                dataPath_prefix + '/%s/images/' % (args.target) + list_patition_label[index, 0])
-                            data_labels.append(label)
-                            data_bboxs.append((0, 0, ori_img_w, ori_img_h))
-                            data_landmarks.append(landmark)
-                            n_class[label]+=1
-
-            if args.target == 'JAFFE':
-                list_patition_label = pd.read_csv(dataPath_prefix + '/JAFFE/list/list_putao.txt', header=None,
-                                                  delim_whitespace=True)
-                list_patition_label = np.array(list_patition_label)
-
-                for index in range(list_patition_label.shape[0]):
-
-                    if not os.path.exists(
-                            dataPath_prefix + '/JAFFE/annos/bbox/' + list_patition_label[index, 0][:-4] + 'txt'):
-                        continue
-                    if not os.path.exists(
-                            dataPath_prefix + '/JAFFE/annos/landmark_5/' + list_patition_label[index, 0][:-4] + 'txt'):
-                        continue
-
-                    bbox = np.loadtxt(
-                        dataPath_prefix + '/JAFFE/annos/bbox/' + list_patition_label[index, 0][:-4] + 'txt').astype(
-                        np.int)
-                    landmark = np.loadtxt(
-                        dataPath_prefix + '/JAFFE/annos/landmark_5/' + list_patition_label[index, 0][
-                                                                       :-4] + 'txt').astype(
-                        np.int)
-
-                    data_imgs.append(dataPath_prefix + '/JAFFE/images/' + list_patition_label[index, 0])
-                    data_labels.append(list_patition_label[index, 1])
-                    data_bboxs.append(bbox)
-                    data_landmarks.append(landmark)
-
-    elif flag1 == 'test':
-        if flag2 == 'source':
-            if args.source == 'RAF':
-                list_patition_label = pd.read_csv(dataPath_prefix + '/%s/lists/image_list.txt' % (args.source),
-                                                  header=None, delim_whitespace=True)
-                list_patition_label = np.array(list_patition_label)
-                for index in range(list_patition_label.shape[0]):
-                    if list_patition_label[index, 0][:4] == "test":
-                        if not os.path.exists(
-                                dataPath_prefix + '/%s/boundingbox/' % (args.source) + list_patition_label[index, 0][
-                                                                                       :-4] + '_boundingbox.txt'):
-                            continue
-                        if not os.path.exists(
-                                dataPath_prefix + '/%s/landmarks_5/' % (args.source) + list_patition_label[index, 0][
-                                                                                       :-3] + 'txt'):
-                            continue
-
-                        bbox = np.loadtxt(
-                            dataPath_prefix + '/%s/boundingbox/' % (args.source) + list_patition_label[index, 0][
-                                                                                   :-4] + '_boundingbox.txt').astype(
-                            np.int)
-                        landmark = np.loadtxt(
-                            dataPath_prefix + '/%s/landmarks_5/' % (args.source) + list_patition_label[index, 0][
-                                                                                   :-3] + 'txt').astype(np.int)
-                        data_imgs.append(
-                            dataPath_prefix + '/%s/images/' % (args.source) + list_patition_label[index, 0])
-                        data_labels.append(list_patition_label[index, 1])
-                        data_bboxs.append(bbox)
-                        data_landmarks.append(landmark)
-
-            if args.source == 'RAF_7class':
-                list_patition_label = pd.read_csv(
-                    dataPath_prefix + '/RAF_7class/basic/EmoLabel/list_patition_label.txt', header=None,
-                    delim_whitespace=True)
-                list_patition_label = np.array(list_patition_label)
-                for index in range(list_patition_label.shape[0]):
-                    if list_patition_label[index, 0][:4] == "test":
-                        if not os.path.exists(
-                                dataPath_prefix + '/RAF_7class/basic/Annotation/boundingbox/' + list_patition_label[
-                                                                                                    index, 0][
-                                                                                                :-4] + '_boundingbox' + '.txt'):
-                            continue
-                        if not os.path.exists(
-                                dataPath_prefix + '/RAF_7class/basic/Annotation/Landmarks_5/' + list_patition_label[
-                                                                                                    index, 0][
-                                                                                                :-4] + '.txt'):
-                            continue
-                        bbox = np.loadtxt(
-                            dataPath_prefix + '/RAF_7class/basic/Annotation/boundingbox/' + list_patition_label[
-                                                                                                index, 0][
-                                                                                            :-4] + '_boundingbox.txt').astype(
-                            np.int)
-                        landmark = np.loadtxt(
-                            dataPath_prefix + '/RAF_7class/basic/Annotation/Landmarks_5/' + list_patition_label[
-                                                                                                index, 0][
-                                                                                            :-3] + 'txt').astype(np.int)
-
-                        data_imgs.append(
-                            dataPath_prefix + '/RAF_7class/basic/Image/original/' + list_patition_label[index, 0])
-                        data_labels.append(list_patition_label[index, 1] - 1)
-                        data_bboxs.append(bbox)
-                        data_landmarks.append(landmark)
-
-        elif flag2 == 'target':
-            if args.target == 'AISIN':
-                list_patition_label = pd.read_csv(dataPath_prefix + '/%s/lists/image_list.txt' % (args.target),
-                                                  header=None,
-                                                  delim_whitespace=True)
-                list_patition_label = np.array(list_patition_label)
-                for index in range(list_patition_label.shape[0]):
-                    if list_patition_label[index, 0][:4] == "test":
-                        if not os.path.exists(
-                                dataPath_prefix + '/%s/landmarks_5/' % (args.target) + list_patition_label[index, 0][
-                                                                                       :-3] + 'txt'):
-                            continue
-                        img = Image.open(
-                            dataPath_prefix + '/%s/images/' % (args.target) + list_patition_label[index, 0]).convert(
-                            'RGB')
-                        ori_img_w, ori_img_h = img.size
-                        landmark = np.loadtxt(
-                            dataPath_prefix + '/%s/landmarks_5/' % (args.target) + list_patition_label[index, 0][
-                                                                                   :-3] + 'txt').astype(np.int)
-
-                        data_imgs.append(
-                            dataPath_prefix + '/%s/images/' % (args.target) + list_patition_label[index, 0])
-                        data_labels.append(list_patition_label[index, 1])
-                        data_bboxs.append((0, 0, ori_img_w, ori_img_h))
-                        data_landmarks.append(landmark)
-
-            if args.target == 'JAFFE':
-                list_patition_label = pd.read_csv(dataPath_prefix + '/JAFFE/list/list_putao.txt', header=None,
-                                                  delim_whitespace=True)
-                list_patition_label = np.array(list_patition_label)
-
-                for index in range(list_patition_label.shape[0]):
-                    if not os.path.exists(
-                            dataPath_prefix + '/JAFFE/annos/bbox/' + list_patition_label[index, 0][:-4] + 'txt'):
-                        continue
-                    if not os.path.exists(
-                            dataPath_prefix + '/JAFFE/annos/landmark_5/' + list_patition_label[index, 0][:-4] + 'txt'):
-                        continue
-
-                    bbox = np.loadtxt(
-                        dataPath_prefix + '/JAFFE/annos/bbox/' + list_patition_label[index, 0][:-4] + 'txt').astype(
-                        np.int)
-                    landmark = np.loadtxt(
-                        dataPath_prefix + '/JAFFE/annos/landmark_5/' + list_patition_label[index, 0][
-                                                                       :-4] + 'txt').astype(
-                        np.int)
-
-                    data_imgs.append(dataPath_prefix + '/JAFFE/images/' + list_patition_label[index, 0])
-                    data_labels.append(list_patition_label[index, 1])
-                    data_bboxs.append(bbox)
-                    data_landmarks.append(landmark)
+    if flag2 == 'source':
+        domain = args.source
+    elif flag2 == 'target':
+        domain = args.target
+    data_dict = get_dataset(split=flag1, domain = domain)
 
     # DataSet Distribute
-    distribute_ = np.array(data_labels)
-    print(' %s %s dataset qty: %d' % (flag1, flag2, len(data_imgs)))
+    distribute_ = np.array(data_dict['labels'])
+    print(' %s %s dataset qty: %d' % (flag1, flag2, len(data_dict['img_paths'])))
     dataset_dist = []
     for i in range(args.class_num):
         dataset_dist.append(np.sum(distribute_ == i))
@@ -349,7 +114,7 @@ def BuildDataloader(args, flag1='train', flag2='source', max_samples=-1):
     print("Dataset Distribution for %s classes is: " % (args.class_num), dataset_dist)
 
     # DataSet
-    data_set = MyDataset(data_imgs, data_labels, data_bboxs, data_landmarks, flag1, trans, target_trans)
+    data_set = MyDataset(data_dict['img_paths'], data_dict['labels'], data_dict['bboxs'], data_dict['landmarks'], flag1, trans, target_trans)
 
     # DataLoader
     if flag1 == 'train':

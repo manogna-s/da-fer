@@ -43,11 +43,11 @@ def Test(args, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='
 
     AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
 
-    LoggerInfo = AccuracyInfo
-    LoggerInfo += '''    Acc_avg {0:.4f} Prec_avg {1:.4f} Recall_avg {2:.4f} F1_avg {3:.4f}
-    Loss {loss:.4f}'''.format(acc_avg, prec_avg, recall_avg, f1_avg, loss=loss.avg)
+    #LoggerInfo = AccuracyInfo
+    #LoggerInfo += '''    Acc_avg {0:.4f} Prec_avg {1:.4f} Recall_avg {2:.4f} F1_avg {3:.4f}
+    #Loss {loss:.4f}'''.format(acc_avg, prec_avg, recall_avg, f1_avg, loss=loss.avg)
 
-    print(LoggerInfo)
+    print(f'Loss: {loss.avg:.4f}')
 
     if Best_Recall is not None:
         # Save Checkpoints

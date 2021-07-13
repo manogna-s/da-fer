@@ -4,7 +4,6 @@ import random
 import numpy as np
 from PIL import Image, ImageDraw
 
-import torch
 import torch.utils.data as data
 
 def L_loader(path):
@@ -25,7 +24,7 @@ class MyDataset(data.Dataset):
         self.flag = flag
         
     def __getitem__(self, index):
-        img, label, bbox, landmark = self.loader(self.imgs[index]), copy.deepcopy(self.labels[index]), copy.deepcopy(self.bboxs[index]), copy.deepcopy(self.landmarks[index])
+        img, label, bbox, landmark = self.loader(self.imgs[index]), copy.deepcopy(self.labels[index]), copy.deepcopy(self.bboxs[index]), np.array(copy.deepcopy(self.landmarks[index]))
         ori_img_w, ori_img_h = img.size
 
         # BoundingBox

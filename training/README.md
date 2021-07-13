@@ -22,11 +22,11 @@ cd training
 sh scripts/gcn_source_train.sh 0 exp_gcn_source
 ```
 
-To set number of samples per class/ to use balanced dataset (only for 2-class RAF to AISIN) , use args 
+To set number of samples per class/ to use balanced dataset (only for RAF_2class to AISIN) , use args 
 ```
 --source_labeled {n_source_train} 
 --target_unlabeled {n_target_train}
 ```
-For RAF to AISIN with balanced dataset, use approx n_source_train = 2465, n_target_train = 1700
+For RAF_2class to AISIN with balanced dataset, use approx n_source_train = 2465, n_target_train = 1700
  
 Note: Training GCN on source and using k-means init is not working currently.

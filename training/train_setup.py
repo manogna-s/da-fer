@@ -13,12 +13,12 @@ parser.add_argument('--GPU_ID', default='0', type=str, help='CUDA_VISIBLE_DEVICE
 parser.add_argument('--save_checkpoint', type=str2bool, default=False, help='whether to save checkpoint')
 
 # Dataset args
-parser.add_argument('--source', type=str, default='RAF', choices=['RAF', 'RAF_7class'])
+parser.add_argument('--source', type=str, default='RAF', choices=['RAF', 'RAF_2class'])
 parser.add_argument('--target', type=str, default='AISIN',
-                    choices=['JAFFE', 'AISIN'])
+                    choices=['JAFFE', 'AISIN', 'CK+', 'SFEW'])
 # set maximum no. of samples per class. Use to create balanced no. of samples.
 parser.add_argument('--source_labeled', type=int, default=-1,
-                    help='number of unlabeled samples (default: -1 == all samples)')  # 2465 for RAF
+                    help='number of unlabeled samples (default: -1 == all samples)')  # 2465 for RAF_2class
 parser.add_argument('--target_unlabeled', type=int, default=-1,
                     help='number of unlabeled samples (default: -1 == all samples)')  # 1700 for AISIN
 
@@ -37,7 +37,10 @@ parser.add_argument('--use_mme', type=str2bool, default=False, help='whether to 
 # MCD
 parser.add_argument('--use_mcd', type=str2bool, default=False, help='whether to use MCD')
 parser.add_argument('--use_grl', type=str2bool, default=False, help='whether to use one step grl')
-parser.add_argument('--use_stoch_cls', type=str2bool, default=False, help='whether to use stochastic classifier')
+
+#STAR
+parser.add_argument('--use_star', type=str2bool, default=False, help='whether to use stochastic classifier')
+parser.add_argument('--use_stoch_bias', type=str2bool, default=False, help='whether to use stochastic bias in classifier')
 
 # Feature norm based DA methods
 parser.add_argument('--use_afn', type=str2bool, default=False, help='whether to use AFN Loss')
@@ -122,6 +125,11 @@ def print_experiment_info(args):
         if args.use_mcd:
             print('Using MCD for domain adaptation')
 
+        if args.use_star:
+            print('Using STAR for domain adaptation')
+
+        if args.use_grl:
+            print('Using gradient reversal')
     print('================================================')
 
     print('Number of classes : %d' % args.class_num)

@@ -4,7 +4,8 @@ import torch.nn as nn
 from torch.nn import Conv2d, BatchNorm2d, PReLU, Sequential
 from models.ResNet_utils import bottleneck_IR, get_block, get_blocks, init_weights
 from torch.autograd import Function
-
+import torch.nn.functional as F
+from torch.nn.parameter import Parameter
 
 class GradReverse(Function):
     @staticmethod
@@ -53,29 +54,41 @@ class ResClassifier(nn.Module):
 
 
 class StochasticClassifier(nn.Module):
-    def __init__(self, num_classes=7, input_dim=384, hidden=100):
+    def __init__(self, num_classes=7, input_dim=384, hidden=100, stoch_bias=False):
         super(StochasticClassifier, self).__init__()
+        
+        self.stoch_bias=stoch_bias
 
         self.fc = nn.Linear(input_dim, hidden)
         self.weight = torch.zeros((num_classes, hidden))
-        self.bias = torch.zeros(num_classes)
 
-        self.weight_mu = torch.randn_like(self.weight, requires_grad=True)
-        self.weight_logvar = torch.randn_like(self.weight, requires_grad=True)
+        self.weight_mu = Parameter(torch.empty_like(self.weight, requires_grad=True))
+        self.weight_rho = Parameter(torch.empty_like(self.weight, requires_grad=True))
 
-        self.bias_mu = torch.zeros_like(self.bias, requires_grad=True)
-        self.bias_logvar = torch.randn_like(self.bias, requires_grad=True)
+        if self.stoch_bias:
+            print('Using stochastic bias')
+            self.bias = torch.zeros(num_classes)
+            self.bias_mu = Parameter(torch.empty_like(self.bias, requires_grad=True))
+            self.bias_rho = Parameter(torch.empty_like(self.bias, requires_grad=True))
+        else:
+            self.bias = Parameter(torch.zeros(num_classes))
 
         self.fc.apply(init_weights)
+        nn.init.xavier_normal_(self.weight_mu)
+        nn.init.constant_(self.weight_rho, -5)
+        nn.init.zeros_(self.bias_mu)
+        nn.init.constant_(self.bias_rho, -5)
+
 
     def reparameterize(self):
-        std = torch.exp(0.5 * self.weight_logvar)
+        std =  torch.log(1+torch.exp(self.weight_rho)) #torch.exp(0.5 * self.weight_logvar)
         eps = torch.randn_like(std)
         self.weight = self.weight_mu + eps * std
-
-        std = torch.exp(0.5 * self.bias_logvar)
-        eps = torch.randn_like(std)
-        self.bias = self.bias_mu + eps * std
+        
+        if self.stoch_bias:
+            std = torch.log(1+torch.exp(self.bias_rho)) #torch.exp(0.5 * self.bias_logvar)
+            eps = torch.randn_like(std)
+            self.bias = self.bias_mu + eps * std
         return
 
     def forward(self, x, reverse=False):

@@ -263,6 +263,16 @@ def Test_STAR(args, G, F_cls, dataloaders, splits=None):
             Compute_Accuracy(args, output1, label, acc1, prec1, recall1)
 
         AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc1, prec1, recall1, args.class_num)
+
+    # print('Weight mean')
+    # print(F_cls.weight_mu)
+    print('Weight sigma')
+    print(torch.log(1+torch.exp(F_cls.weight_rho)))
+
+    # print('Bias mean')
+    # print(F_cls.bias_mu)
+    print('Bias sigma')
+    print(torch.log(1+torch.exp(F_cls.bias_rho)))
     return
 
 
@@ -277,28 +287,28 @@ def main():
     optimizer_g, lr = lr_scheduler_withoutDecay(optimizer_g, lr=args.lr)
     scheduler_g = optim.lr_scheduler.StepLR(optimizer_g, step_size=20, gamma=0.1, verbose=True)
 
-    F_cls = StochasticClassifier(num_classes=args.class_num)
+    F_cls = StochasticClassifier(num_classes=args.class_num, stoch_bias=args.use_stoch_bias)
     F_cls.cuda()
     optimizer_f = optim.SGD(F_cls.parameters(), momentum=0.9, lr=0.001, weight_decay=0.0005)
     scheduler_f = optim.lr_scheduler.StepLR(optimizer_f, step_size=20, gamma=0.1, verbose=True)
-
+    
     # Running Experiment
     print("Run Experiment...")
     for epoch in range(1, args.epochs + 1):
         print(f'Epoch : {epoch}')
         if args.use_grl:
-            Train_STAR_grl(args, G, F, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
+            Train_STAR_grl(args, G, F_cls, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
                   epoch, writer)
         else:
-            Train_STAR(args, G, F, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
+            Train_STAR(args, G, F_cls, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
                   epoch, writer)
         scheduler_g.step()
         scheduler_f.step()
         print('\nEvaluation ...')
-        Test_STAR(args, G, F, dataloaders, splits=['train_source', 'train_target', 'test_source', 'test_target'])
+        Test_STAR(args, G, F_cls, dataloaders, splits=['train_source', 'train_target', 'test_source', 'test_target'])
         if args.save_checkpoint:
-            torch.save(G.state_dict(), os.path.join(args.out, f'star_G_{epoch}.pkl'))
-            torch.save(F_cls.state_dict(), os.path.join(args.out, f'star_F_{epoch}.pkl'))
+            torch.save(G.state_dict(), os.path.join(args.out, f'ckpts/star_G.pkl'))
+            torch.save(F_cls.state_dict(), os.path.join(args.out, f'ckpts/star_F.pkl'))
     writer.close()
 
 

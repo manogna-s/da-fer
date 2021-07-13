@@ -152,6 +152,13 @@ def Train_DANN(args, model, ad_net, random_layer, train_source_dataloader, train
 
         end = time.time()
 
+    LoggerInfo = '''\n
+    [Train on Source and unlabeled target]: 
+    Epoch {0}
+    Learning Rate {1} Learning Rate(AdversarialNet) {2}\n'''.format(epoch, lr, lr_ad if args.use_dan else 0)
+
+    print(LoggerInfo)
+
     AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
 
     writer.add_scalar('Accuracy', acc_avg, epoch)
@@ -162,14 +169,7 @@ def Train_DANN(args, model, ad_net, random_layer, train_source_dataloader, train
     if args.use_dan:
         writer.add_scalar('AdversarialNetwork_Accuracy', num_ADNet / (2.0 * args.train_batch * num_iter), epoch)
 
-    LoggerInfo = '''\n
-    [Train on Source and unlabeled target]: 
-    Epoch {0}
-    Learning Rate {1} Learning Rate(AdversarialNet) {2}\n'''.format(epoch, lr, lr_ad if args.use_dan else 0)
-
-    LoggerInfo += AccuracyInfo
-
-    LoggerInfo += '''    AdversarialNet Acc {0:.4f} Acc_avg {1:.4f} Prec_avg {2:.4f} Recall_avg {3:.4f} F1_avg {4:.4f}
+    LoggerInfo = '''    AdversarialNet Acc {0:.4f} Acc_avg {1:.4f} Prec_avg {2:.4f} Recall_avg {3:.4f} F1_avg {4:.4f}
     Total Loss {loss:.4f} Global Cls Loss {global_cls_loss:.4f} Local Cls Loss {local_cls_loss:.4f} AFN Loss {afn_loss:.4f} DAN Loss {dan_loss:.4f}'''.format(
         num_ADNet / (2.0 * args.train_batch * num_iter) if args.use_dan else 0, acc_avg, prec_avg, recall_avg, f1_avg,
         loss=loss.avg, global_cls_loss=global_cls_loss.avg, local_cls_loss=local_cls_loss.avg,

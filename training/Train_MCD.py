@@ -309,9 +309,9 @@ def main():
         print('\nEvaluation ...')
         Test_MCD(args, G, F1, F2, dataloaders, splits=['train_source', 'train_target', 'test_source', 'test_target'])
         if args.save_checkpoint:
-            torch.save(G.state_dict(), os.path.join(args.out, f'{args.log}_G_{epoch}.pkl'))
-            torch.save(F1.state_dict(), os.path.join(args.out, f'{args.log}_F1_{epoch}.pkl'))
-            torch.save(F2.state_dict(), os.path.join(args.out, f'{args.log}_F2_{epoch}.pkl'))
+            torch.save(G.state_dict(), os.path.join(args.out, f'ckpts/MCD_G.pkl'))
+            torch.save(F1.state_dict(), os.path.join(args.out, f'ckpts/MCD_F1.pkl'))
+            torch.save(F2.state_dict(), os.path.join(args.out, f'ckpts/MCD_F2.pkl'))
     writer.close()
 
 

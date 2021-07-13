@@ -8,7 +8,7 @@ saveCheckPoint='False'
 
 OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 CUDA_VISIBLE_DEVICES=$1 nohup python Train_MCD.py  \
 --use_mcd True \
---use_grl True \
+--use_grl False \
 --log summary_logs  \
 --out ./exp_logs/$2 \
 --local_feat ${useLocalFeature} \

@@ -13,15 +13,15 @@ def RGB_loader(path):
     return Image.open(path).convert('RGB')
 
 class MyDataset(data.Dataset):
-    def __init__(self, imgs, labels, bboxs, landmarks, flag, transform=None, target_transform=None, loader=RGB_loader):
+    def __init__(self, imgs, labels, bboxs, landmarks, split, domain, transform=None, loader=RGB_loader):
         self.imgs = imgs
         self.labels = labels
         self.bboxs = bboxs
         self.landmarks = landmarks
         self.transform = transform
-        self.target_transform = target_transform
         self.loader = loader
-        self.flag = flag
+        self.split = split
+        self.domain = domain
         
     def __getitem__(self, index):
         img, label, bbox, landmark = self.loader(self.imgs[index]), copy.deepcopy(self.labels[index]), copy.deepcopy(self.bboxs[index]), np.array(copy.deepcopy(self.landmarks[index]))
@@ -35,10 +35,10 @@ class MyDataset(data.Dataset):
 
         enlarge_bbox = True
 
-        if self.flag=='train':
+        if self.split=='train' and self.domain=='source':
             random_crop = True
             random_flip = True
-        elif self.flag=='test':
+        else:
             random_crop = False
             random_flip = False
 
@@ -74,7 +74,6 @@ class MyDataset(data.Dataset):
 
         # Transform Image
         trans_img = self.transform(img)
-        _, trans_img_w, trans_img_h = trans_img.size()
 
         inputSizeOfCropNet = 28
         landmark[:, 0] = landmark[:, 0] * inputSizeOfCropNet / crop_img_w

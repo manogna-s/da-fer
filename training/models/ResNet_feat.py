@@ -54,30 +54,34 @@ class ResClassifier(nn.Module):
 
 
 class StochasticClassifier(nn.Module):
-    def __init__(self, num_classes=7, input_dim=384, hidden=100, stoch_bias=False):
+    def __init__(self, args, input_dim=384, hidden=-1):
         super(StochasticClassifier, self).__init__()
         
-        self.stoch_bias=stoch_bias
+        self.stoch_bias=args.use_stoch_bias
 
-        self.fc = nn.Linear(input_dim, hidden)
-        self.weight = torch.zeros((num_classes, hidden))
+        if hidden>0:
+            self.fc = nn.Linear(input_dim, hidden)
+        else:
+            self.fc = nn.Identity()
+            hidden = input_dim
+        self.weight = torch.zeros((args.class_num, hidden))
 
         self.weight_mu = Parameter(torch.empty_like(self.weight, requires_grad=True))
         self.weight_rho = Parameter(torch.empty_like(self.weight, requires_grad=True))
 
         if self.stoch_bias:
             print('Using stochastic bias')
-            self.bias = torch.zeros(num_classes)
+            self.bias = torch.zeros(args.class_num)
             self.bias_mu = Parameter(torch.empty_like(self.bias, requires_grad=True))
             self.bias_rho = Parameter(torch.empty_like(self.bias, requires_grad=True))
         else:
-            self.bias = Parameter(torch.zeros(num_classes))
+            self.bias = Parameter(torch.zeros(args.class_num))
 
         self.fc.apply(init_weights)
         nn.init.xavier_normal_(self.weight_mu)
-        nn.init.constant_(self.weight_rho, -5)
+        nn.init.constant_(self.weight_rho, -args.var_rho)
         nn.init.zeros_(self.bias_mu)
-        nn.init.constant_(self.bias_rho, -5)
+        nn.init.constant_(self.bias_rho, -args.var_rho)
 
 
     def reparameterize(self):

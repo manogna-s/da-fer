@@ -41,6 +41,8 @@ parser.add_argument('--use_grl', type=str2bool, default=False, help='whether to 
 #STAR
 parser.add_argument('--use_star', type=str2bool, default=False, help='whether to use stochastic classifier')
 parser.add_argument('--use_stoch_bias', type=str2bool, default=False, help='whether to use stochastic bias in classifier')
+parser.add_argument('--var_rho', type=float, default=5, help='var=log(1+exp(-rho))')
+parser.add_argument('--n_hidden', type=float, default=-1, help='fc layer: 384>n_hidden>num_classes')
 
 # Feature norm based DA methods
 parser.add_argument('--use_afn', type=str2bool, default=False, help='whether to use AFN Loss')
@@ -167,10 +169,10 @@ def print_experiment_info(args):
 def train_setup(args):
     # Build Dataloader
     print("Building Train and Test Dataloader...")
-    dataloaders = {'train_source': BuildDataloader(args, flag1='train', flag2='source', max_samples=args.source_labeled),
-                   'train_target': BuildDataloader(args, flag1='train', flag2='target', max_samples=args.target_unlabeled),
-                   'test_source': BuildDataloader(args, flag1='test', flag2='source'),
-                   'test_target': BuildDataloader(args, flag1='test', flag2='target')}
+    dataloaders = {'train_source': BuildDataloader(args, split='train', domain='source', max_samples=args.source_labeled),
+                   'train_target': BuildDataloader(args, split='train', domain='target', max_samples=args.target_unlabeled),
+                   'test_source': BuildDataloader(args, split='test', domain='source'),
+                   'test_target': BuildDataloader(args, split='test', domain='target')}
     print('Done!')
 
     print('================================================')

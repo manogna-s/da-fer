@@ -70,8 +70,8 @@ def BuildAdversarialNetwork(args, model_output_num, class_num=7):
     return random_layer, ad_net
 
 
-def get_dataset(split='train', domain='RAF', max_samples=-1):
-    annotations_file = os.path.join('../Dataset', domain, 'annotations', split+'_annotations.json')
+def get_dataset(split='train', dataset='RAF', max_samples=-1):
+    annotations_file = os.path.join('../Dataset', dataset, 'annotations', split+'_annotations.json')
     with open(annotations_file, 'r') as fp:
         annotations = json.load(fp)[split]
     df = pd.DataFrame.from_dict(annotations)
@@ -85,11 +85,11 @@ def get_dataset(split='train', domain='RAF', max_samples=-1):
     return data
 
 
-def BuildDataloader(args, flag1='train', flag2='source', max_samples=-1):
+def BuildDataloader(args, split='train', domain='source', max_samples=-1):
     """Bulid data loader."""
 
-    assert flag1 in ['train', 'test'], 'Function BuildDataloader : function parameter flag1 wrong.'
-    assert flag2 in ['source', 'target'], 'Function BuildDataloader : function parameter flag2 wrong.'
+    assert split in ['train', 'test'], 'Function BuildDataloader : function parameter flag1 wrong.'
+    assert domain in ['source', 'target'], 'Function BuildDataloader : function parameter flag2 wrong.'
 
     # Set Transform
     trans = transforms.Compose([
@@ -97,17 +97,16 @@ def BuildDataloader(args, flag1='train', flag2='source', max_samples=-1):
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
-    target_trans = None
 
-    if flag2 == 'source':
-        domain = args.source
-    elif flag2 == 'target':
-        domain = args.target
-    data_dict = get_dataset(split=flag1, domain = domain, max_samples=max_samples)
+    if domain == 'source':
+        dataset = args.source
+    elif domain == 'target':
+        dataset = args.target
+    data_dict = get_dataset(split=split, dataset = dataset, max_samples=max_samples)
 
     # DataSet Distribute
     distribute_ = np.array(data_dict['labels'])
-    print(' %s %s dataset qty: %d' % (flag1, flag2, len(data_dict['img_paths'])))
+    print(' %s %s dataset qty: %d' % (split, domain, len(data_dict['img_paths'])))
     dataset_dist = []
     for i in range(args.class_num):
         dataset_dist.append(np.sum(distribute_ == i))
@@ -115,13 +114,13 @@ def BuildDataloader(args, flag1='train', flag2='source', max_samples=-1):
     print("Dataset Distribution for %s classes is: " % (args.class_num), dataset_dist)
 
     # DataSet
-    data_set = MyDataset(data_dict['img_paths'], data_dict['labels'], data_dict['bboxs'], data_dict['landmarks'], flag1, trans, target_trans)
+    data_set = MyDataset(data_dict['img_paths'], data_dict['labels'], data_dict['bboxs'], data_dict['landmarks'], split, domain, trans)
 
     # DataLoader
-    if flag1 == 'train':
+    if split == 'train':
         data_loader = data.DataLoader(dataset=data_set, batch_size=args.train_batch, shuffle=True, num_workers=8,
                                       drop_last=True)
-    elif flag1 == 'test':
+    elif split == 'test':
         data_loader = data.DataLoader(dataset=data_set, batch_size=args.test_batch, shuffle=False, num_workers=8,
                                       drop_last=False)
 

@@ -167,7 +167,7 @@ def Train_STAR(args, G, F_cls, train_source_dataloader, train_target_dataloader,
         target1 = label_source
         loss1 = criterion(output_s1, target1)
         loss2 = criterion(output_s2, target1)
-        all_loss = loss1 + loss2 + 0.01 * entropy_loss
+        all_loss = loss1 + loss2 + 0.0 * entropy_loss
         all_loss.backward()
         optimizer_g.step()
         optimizer_f.step()
@@ -187,10 +187,10 @@ def Train_STAR(args, G, F_cls, train_source_dataloader, train_target_dataloader,
         output_t2 = F.softmax(output_t2)
         loss1 = criterion(output_s1, target1)
         loss2 = criterion(output_s2, target1)
-        entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
+        entropy_loss =- torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
         entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
         loss_dis = torch.mean(torch.abs(output_t1 - output_t2))
-        F_loss = loss1 + loss2 - eta * loss_dis + 0.01 * entropy_loss
+        F_loss = loss1 + loss2 - eta * loss_dis + 0.0 * entropy_loss
         F_loss.backward()
         optimizer_f.step()
         # Step C train generator to minimize discrepancy
@@ -216,10 +216,10 @@ def Train_STAR(args, G, F_cls, train_source_dataloader, train_target_dataloader,
             loss_dis.backward()
             optimizer_g.step()
 
-        print('Train Ep: {} [{}/{} ({:.0f}%)]\tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f}'.format(
-            epoch, batch_index * batch_size, 12000,
-                   100. * batch_index / num_iter, loss1.data.item(), loss2.data.item(), loss_dis.data.item(),
-            entropy_loss.data.item()))
+        # print('Train Ep: {} [{}/{} ({:.0f}%)]\tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f}'.format(
+        #     epoch, batch_index * batch_size, 12000,
+        #            100. * batch_index / num_iter, loss1.data.item(), loss2.data.item(), loss_dis.data.item(),
+        #     entropy_loss.data.item()))
 
         # Log loss
         m_total_loss.update(float(F_loss.cpu().data.item()))
@@ -266,13 +266,13 @@ def Test_STAR(args, G, F_cls, dataloaders, splits=None):
 
     # print('Weight mean')
     # print(F_cls.weight_mu)
-    print('Weight sigma')
-    print(torch.log(1+torch.exp(F_cls.weight_rho)))
+    # print('Weight sigma')
+    # print(torch.log(1+torch.exp(F_cls.weight_rho)))
 
     # print('Bias mean')
     # print(F_cls.bias_mu)
-    print('Bias sigma')
-    print(torch.log(1+torch.exp(F_cls.bias_rho)))
+    # print('Bias sigma')
+    # print(torch.log(1+torch.exp(F_cls.bias_rho)))
     return
 
 

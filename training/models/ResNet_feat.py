@@ -81,14 +81,20 @@ class StochasticClassifier(nn.Module):
 
 
     def reparameterize(self):
-        std =  torch.log(1+torch.exp(self.weight_rho)) #torch.exp(0.5 * self.weight_logvar)
-        eps = torch.randn_like(std)
-        self.weight = self.weight_mu + eps * std
+        weight_std =  torch.log(1+torch.exp(self.weight_rho)) 
+        bias_std = torch.log(1+torch.exp(self.bias_rho)) 
+
+        if self.training:
+            weight_eps = torch.randn_like(weight_std)
+            bias_eps = torch.randn_like(bias_std)
+        else:
+            weight_eps = torch.zeros_like(weight_std)
+            bias_eps = torch.zeros_like(bias_std)
+
+        self.weight = self.weight_mu + weight_eps * weight_std
         
         if self.stoch_bias:
-            std = torch.log(1+torch.exp(self.bias_rho)) #torch.exp(0.5 * self.bias_logvar)
-            eps = torch.randn_like(std)
-            self.bias = self.bias_mu + eps * std
+            self.bias = self.bias_mu + bias_eps * bias_std
         return
 
     def forward(self, x, reverse=False):

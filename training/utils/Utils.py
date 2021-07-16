@@ -70,12 +70,13 @@ def BuildAdversarialNetwork(args, model_output_num, class_num=7):
     return random_layer, ad_net
 
 
-def get_dataset(split='train', domain='RAF'):
+def get_dataset(split='train', domain='RAF', max_samples=-1):
     annotations_file = os.path.join('../Dataset', domain, 'annotations', split+'_annotations.json')
     with open(annotations_file, 'r') as fp:
         annotations = json.load(fp)[split]
-
     df = pd.DataFrame.from_dict(annotations)
+    if max_samples>0:
+        df = df.head(max_samples)
     data = {}
     data['img_paths']=df['img_path'].tolist()
     data['bboxs']=df['bbox'].tolist()
@@ -102,7 +103,7 @@ def BuildDataloader(args, flag1='train', flag2='source', max_samples=-1):
         domain = args.source
     elif flag2 == 'target':
         domain = args.target
-    data_dict = get_dataset(split=flag1, domain = domain)
+    data_dict = get_dataset(split=flag1, domain = domain, max_samples=max_samples)
 
     # DataSet Distribute
     distribute_ = np.array(data_dict['labels'])

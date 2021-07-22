@@ -37,12 +37,15 @@ parser.add_argument('--use_mme', type=str2bool, default=False, help='whether to 
 # MCD
 parser.add_argument('--use_mcd', type=str2bool, default=False, help='whether to use MCD')
 parser.add_argument('--use_grl', type=str2bool, default=False, help='whether to use one step grl')
+parser.add_argument('--lamda_ent', type=float, default=0.01, help='weight for entropy loss')
 
 #STAR
 parser.add_argument('--use_star', type=str2bool, default=False, help='whether to use stochastic classifier')
 parser.add_argument('--use_stoch_bias', type=str2bool, default=False, help='whether to use stochastic bias in classifier')
 parser.add_argument('--var_rho', type=float, default=5, help='var=log(1+exp(-rho))')
-parser.add_argument('--n_hidden', type=float, default=-1, help='fc layer: 384>n_hidden>num_classes')
+parser.add_argument('--n_hidden', type=int, default=-1, help='fc layer: 384>n_hidden>num_classes')
+parser.add_argument('--optimizer', type=str, default='sgd', choices=['sgd', 'adam'])
+
 
 # Feature norm based DA methods
 parser.add_argument('--use_afn', type=str2bool, default=False, help='whether to use AFN Loss')
@@ -188,9 +191,12 @@ def train_setup(args):
         init_gcn(args, dataloaders['train_source'], dataloaders['train_target'], model)
 
     # Set Optimizer
-    print('Building Optimizer...')
+    print(f'Building {args.optimizer} Optimizer...')
     param_optim = Set_Param_Optim(args, model)
-    optimizer = optim.SGD(param_optim, lr=args.lr, weight_decay=args.weight_decay, momentum=args.momentum)
+    if args.optimizer == 'sgd':
+        optimizer = optim.SGD(param_optim, lr=args.lr, weight_decay=args.weight_decay, momentum=args.momentum)
+    if args.optimizer == 'adam':
+        optimizer = optim.Adam(param_optim, lr=args.lr, weight_decay=args.weight_decay)
     print('Done!')
 
     print('================================================')

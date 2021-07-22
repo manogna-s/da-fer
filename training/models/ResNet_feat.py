@@ -1,7 +1,9 @@
 import copy
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn import Conv2d, BatchNorm2d, PReLU, Sequential
+from torch.utils import data
 from models.ResNet_utils import bottleneck_IR, get_block, get_blocks, init_weights
 from torch.autograd import Function
 import torch.nn.functional as F
@@ -53,18 +55,93 @@ class ResClassifier(nn.Module):
         return x
 
 
-class StochasticClassifier(nn.Module):
+class StochasticClassifier_2layer(nn.Module):
     def __init__(self, args, input_dim=384, hidden=-1):
-        super(StochasticClassifier, self).__init__()
+        super(StochasticClassifier_2layer, self).__init__()
         
+        self.classifiers = None
         self.stoch_bias=args.use_stoch_bias
 
         if hidden>0:
-            self.fc = nn.Linear(input_dim, hidden)
+            print(hidden, input_dim)
+            self.fc_weight = torch.zeros((hidden, input_dim))
+            self.fc_w_mu = Parameter(torch.empty_like(self.fc_weight, requires_grad=True))
+            self.fc_w_rho = Parameter(torch.empty_like(self.fc_weight, requires_grad=True))
+
+            self.fc_bias = torch.zeros(hidden)
+            self.fc_b_mu = Parameter(torch.empty_like(self.fc_bias, requires_grad=True))
+            self.fc_b_rho = Parameter(torch.empty_like(self.fc_bias, requires_grad=True))
+            # self.fc = nn.Linear(input_dim, hidden)
         else:
             self.fc = nn.Identity()
             hidden = input_dim
         self.weight = torch.zeros((args.class_num, hidden))
+
+
+        self.weight_mu = Parameter(torch.empty_like(self.weight, requires_grad=True))
+        self.weight_rho = Parameter(torch.empty_like(self.weight, requires_grad=True))
+
+        if self.stoch_bias:
+            print('Using stochastic bias')
+            self.bias = torch.zeros(args.class_num)
+            self.bias_mu = Parameter(torch.empty_like(self.bias, requires_grad=True))
+            self.bias_rho = Parameter(torch.empty_like(self.bias, requires_grad=True))
+        else:
+            self.bias = Parameter(torch.zeros(args.class_num))
+
+        nn.init.xavier_normal_(self.fc_w_mu)
+        nn.init.xavier_normal_(self.weight_mu)
+        nn.init.constant_(self.fc_w_rho, -args.var_rho)
+        nn.init.constant_(self.weight_rho, -args.var_rho)
+        nn.init.zeros_(self.fc_b_mu)
+        nn.init.zeros_(self.bias_mu)
+        nn.init.constant_(self.fc_b_rho, -args.var_rho)
+        nn.init.constant_(self.bias_rho, -args.var_rho)
+
+
+    def reparameterize(self, sample=False):
+        fc_weight_std =  torch.log(1+torch.exp(self.fc_w_rho)) 
+        fc_bias_std = torch.log(1+torch.exp(self.fc_b_rho)) 
+        
+        weight_std =  torch.log(1+torch.exp(self.weight_rho)) 
+        bias_std = torch.log(1+torch.exp(self.bias_rho)) 
+
+        if self.training or sample:
+            fc_w_eps = torch.rand_like(fc_weight_std)
+            fc_b_eps = torch.rand_like(fc_bias_std)
+
+            weight_eps = torch.randn_like(weight_std)
+            bias_eps = torch.randn_like(bias_std)
+        else:
+            fc_w_eps = torch.zeros_like(fc_weight_std)
+            fc_b_eps = torch.zeros_like(fc_bias_std)
+            weight_eps = torch.zeros_like(weight_std)
+            bias_eps = torch.zeros_like(bias_std)
+
+        self.fc_weight = self.fc_w_mu + fc_w_eps * fc_weight_std
+        self.weight = self.weight_mu + weight_eps * weight_std
+        
+        if self.stoch_bias:
+            self.fc_bias = self.fc_b_mu + fc_b_eps * fc_bias_std
+            self.bias = self.bias_mu + bias_eps * bias_std
+        return
+
+    def forward(self, x, reverse=False):
+        self.reparameterize()
+        x = F.linear(x, self.fc_weight, self.fc_bias)
+        if reverse:
+            x = grad_reverse(x)
+        out = F.linear(x, self.weight, self.bias)
+        return out
+
+
+class StochasticClassifier(nn.Module):
+    def __init__(self, args, input_dim=384):
+        super(StochasticClassifier, self).__init__()
+        
+        self.stoch_bias=args.use_stoch_bias
+        self.classifiers = None
+        self.weight = torch.zeros((args.class_num, input_dim))
 
         self.weight_mu = Parameter(torch.empty_like(self.weight, requires_grad=True))
         self.weight_rho = Parameter(torch.empty_like(self.weight, requires_grad=True))
@@ -84,11 +161,11 @@ class StochasticClassifier(nn.Module):
         nn.init.constant_(self.bias_rho, -args.var_rho)
 
 
-    def reparameterize(self):
+    def reparameterize(self, sample=False):
         weight_std =  torch.log(1+torch.exp(self.weight_rho)) 
         bias_std = torch.log(1+torch.exp(self.bias_rho)) 
 
-        if self.training:
+        if self.training or sample:
             weight_eps = torch.randn_like(weight_std)
             bias_eps = torch.randn_like(bias_std)
         else:
@@ -104,11 +181,55 @@ class StochasticClassifier(nn.Module):
     def forward(self, x, reverse=False):
         if reverse:
             x = grad_reverse(x)
-        x = self.fc(x)
         self.reparameterize()
         out = F.linear(x, self.weight, self.bias)
         return out
 
+    def eval_n(self, x, n=5):
+
+        if self.classifiers is None:
+            self.classifiers = []
+            for i in range(n):
+                self.reparameterize(sample=True)
+                self.classifiers.append({'weight':self.weight, 'bias':self.bias})
+            # print(self.weight_mu, self.bias_mu)
+            # print(self.classifiers)
+        
+        preds = []
+        ent = []
+        for i in range(n):
+            out = F.linear(x, self.classifiers[i]['weight'], self.classifiers[i]['bias'])
+            probs = torch.softmax(out[0], dim=-1).cpu().data.numpy()
+            ent.append(-np.sum(probs * np.log(probs)))
+            out = out.cpu().data.numpy()
+            pred = np.argmax(out, axis=1)
+            preds.append(pred[0])
+            # print(i, (probs*100).astype(int), pred)
+        return preds, ent
+
+class Stochastic_Features_cls(nn.Module):
+    def __init__(self, args, input_dim=384, hidden=-1):
+        super(Stochastic_Features_cls, self).__init__()
+        
+        self.fc_mean = nn.Linear(input_dim, hidden)
+        self.fc_logvar = nn.Linear(input_dim, hidden)
+
+        self.fc_mean.apply(init_weights)
+        self.fc_logvar.apply(init_weights)
+
+        self.cls = nn.Linear(hidden, args.class_num)
+        self.cls.apply(init_weights)
+
+    def forward(self, x, reverse=False, sample=False):
+        if reverse:
+            x = grad_reverse(x)
+        feature = self.fc_mean(x)
+        if sample:
+            sigma = torch.exp(0.5 * self.fc_logvar(x)) 
+            feature = feature + sigma * torch.rand_like(sigma)
+        out = self.cls(feature)
+        return out
+        
 
 # Support: ['IR_18', 'IR_50']
 class Backbone_Global_Local_feat(nn.Module):

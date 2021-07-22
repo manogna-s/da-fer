@@ -1,7 +1,7 @@
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from models.ResNet_feat import StochasticClassifier
+from models.ResNet_feat import StochasticClassifier, StochasticClassifier_2layer
 from train_setup import *
 
 criterion = nn.CrossEntropyLoss()
@@ -167,7 +167,7 @@ def Train_STAR(args, G, F_cls, train_source_dataloader, train_target_dataloader,
         target1 = label_source
         loss1 = criterion(output_s1, target1)
         loss2 = criterion(output_s2, target1)
-        all_loss = loss1 + loss2 + 0.01 * entropy_loss
+        all_loss = loss1 + loss2 + args.lamda_ent * entropy_loss
         all_loss.backward()
         optimizer_g.step()
         optimizer_f.step()
@@ -190,7 +190,7 @@ def Train_STAR(args, G, F_cls, train_source_dataloader, train_target_dataloader,
         entropy_loss =- torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
         entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
         loss_dis = torch.mean(torch.abs(output_t1 - output_t2))
-        F_loss = loss1 + loss2 - eta * loss_dis + 0.01 * entropy_loss
+        F_loss = loss1 + loss2 - eta * loss_dis + args.lamda_ent * entropy_loss
         F_loss.backward()
         optimizer_f.step()
         # Step C train generator to minimize discrepancy
@@ -284,12 +284,21 @@ def main():
     print_experiment_info(args)
 
     dataloaders, G, optimizer_g, writer = train_setup(args)
+    if args.n_hidden >0:
+        F_cls = StochasticClassifier_2layer(args, hidden=args.n_hidden)
+    else:
+        F_cls = StochasticClassifier(args)
+    F_cls.cuda()
+
+    if args.optimizer == 'sgd':
+        optimizer_f = optim.SGD(F_cls.parameters(), momentum=0.9, lr=0.001, weight_decay=0.0005)
+
+    if args.optimizer == 'adam':
+        optimizer_f = optim.Adam(F_cls.parameters(), lr=0.001, weight_decay=0.0005)
+
+
     optimizer_g, lr = lr_scheduler_withoutDecay(optimizer_g, lr=args.lr)
     scheduler_g = optim.lr_scheduler.StepLR(optimizer_g, step_size=20, gamma=0.1, verbose=True)
-
-    F_cls = StochasticClassifier(args)
-    F_cls.cuda()
-    optimizer_f = optim.SGD(F_cls.parameters(), momentum=0.9, lr=0.001, weight_decay=0.0005)
     scheduler_f = optim.lr_scheduler.StepLR(optimizer_f, step_size=20, gamma=0.1, verbose=True)
     
     # Running Experiment

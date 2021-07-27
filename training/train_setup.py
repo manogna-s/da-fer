@@ -46,6 +46,9 @@ parser.add_argument('--var_rho', type=float, default=5, help='var=log(1+exp(-rho
 parser.add_argument('--n_hidden', type=int, default=-1, help='fc layer: 384>n_hidden>num_classes')
 parser.add_argument('--optimizer', type=str, default='sgd', choices=['sgd', 'adam'])
 
+#Stochastic features
+parser.add_argument('--use_stoch_feats', type=str2bool, default=False, help='Use stochastic features')
+
 
 # Feature norm based DA methods
 parser.add_argument('--use_afn', type=str2bool, default=False, help='whether to use AFN Loss')

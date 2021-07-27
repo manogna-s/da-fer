@@ -43,7 +43,7 @@ def load_resnet_pretrained_weights(model, numOfLayer):
                 subStr[0] == 'output_layer':
             newCheckpoint[key] = value
 
-    model.load_state_dict(newCheckpoint)
+    model.load_state_dict(newCheckpoint, strict=False)
     return model
 
 

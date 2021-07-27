@@ -207,7 +207,7 @@ class StochasticClassifier(nn.Module):
             # print(i, (probs*100).astype(int), pred)
         return preds, ent
 
-class Stochastic_Features_cls(nn.Module):
+class Stochastic_Features_cls_v1(nn.Module):
     def __init__(self, args, input_dim=384, hidden=-1):
         super(Stochastic_Features_cls, self).__init__()
         
@@ -227,9 +227,41 @@ class Stochastic_Features_cls(nn.Module):
         if sample:
             sigma = torch.exp(0.5 * self.fc_logvar(x)) 
             feature = feature + sigma * torch.rand_like(sigma)
+            # entropy = (384 * (1 + np.log(2 * np.pi)) + torch.sum(torch.log(sigma), dim=-1))/2
+            entropy = torch.mean(torch.log(sigma), dim=-1)
+            print(torch.mean(sigma,dim=-1))
         out = self.cls(feature)
         return out
         
+class Stochastic_Features_cls(nn.Module):
+    def __init__(self, args, input_dim=384, hidden=-1):
+        super(Stochastic_Features_cls, self).__init__()
+        
+        self.fc_mean = nn.Linear(input_dim, hidden)
+        self.fc_sigma = nn.Linear(input_dim, hidden)
+
+        self.fc_mean.apply(init_weights)
+        self.fc_sigma.apply(init_weights)
+
+        self.cls = nn.Linear(hidden, args.class_num)
+        self.cls.apply(init_weights)
+
+    def forward(self, x, reverse=False, sample=False):
+        if reverse:
+            x = grad_reverse(x)
+        feature = self.fc_mean(x)
+        if sample:
+            sigma = self.fc_sigma(x)
+            sigma = nn.ReLU()(sigma)
+            feature = feature + sigma * torch.rand_like(sigma)
+        if not self.training:
+            sigma = self.fc_sigma(x)
+            sigma = nn.ReLU()(sigma)
+            print(torch.mean(sigma,dim=-1))
+        out = self.cls(feature)
+        return out
+
+
 
 # Support: ['IR_18', 'IR_50']
 class Backbone_Global_Local_feat(nn.Module):

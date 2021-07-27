@@ -8,6 +8,7 @@ from models.AdversarialNetwork import RandomLayer, AdversarialNetwork
 from models.ResNet import IR_global_local, IR_global
 from models.ResNet_GCN import IR_GCN
 from models.ResNet_feat import IR_global_local_feat
+from models.ResNet_stoch_feat import IR_global_local_stoch_feat
 from models.ResNet_utils import load_resnet_pretrained_weights
 from utils.Dataset import MyDataset
 from utils.misc_utils import *
@@ -31,6 +32,8 @@ def BuildModel(args):
             model = IR_global_local_feat(numOfLayer)
         else:
             print('MCD with only global feat not yet added')
+    elif args.use_stoch_feats:
+        model = IR_global_local_stoch_feat(numOfLayer)
     else:
         if args.local_feat:
             model = IR_global_local(numOfLayer, args.class_num)

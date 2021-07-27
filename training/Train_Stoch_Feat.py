@@ -1,7 +1,7 @@
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from models.ResNet_feat import Stochastic_Features_cls
+from models.ResNet_stoch_feat import *
 from train_setup import *
 
 criterion = nn.CrossEntropyLoss()
@@ -11,12 +11,13 @@ n_samples = 5
 
 def get_sample_loss(G, F1, F2, data, landmark, target):
     loss = 0
-    feat = G(data, landmark)
+    feat = G(data, landmark, sample=True)
     for i in range(n_samples):
-        output = F1(feat, sample=True)
+        output = F1(feat)
         loss += criterion(output, target)
-        output = F2(feat, sample=True)
+        output = F2(feat)
         loss += criterion(output, target)
+    loss = loss/n_samples
     return loss
 
 
@@ -61,8 +62,8 @@ def Train_Stoch_Feat_MCD(args, G, F1, F2, train_source_dataloader, train_target_
         label_source = Variable(label_source)
 
         output = G(data, landmark)
-        output1 = F1(output, sample=False)
-        output2 = F2(output, sample=False)
+        output1 = F1(output)
+        output2 = F2(output)
 
         output_s1 = output1[:batch_size, :]
         output_s2 = output2[:batch_size, :]
@@ -78,10 +79,10 @@ def Train_Stoch_Feat_MCD(args, G, F1, F2, train_source_dataloader, train_target_
         loss1 = criterion(output_s1, target1)
         loss2 = criterion(output_s2, target1)
         all_loss = loss1 + loss2 + args.lamda_ent * entropy_loss
-
-        if epoch>3:
+        sample_loss = 0
+        if epoch>4:
             sample_loss = get_sample_loss(G, F1, F2, data_source, landmark_source, label_source)
-            all_loss += 0.1 * sample_loss
+        all_loss += 0.1 * sample_loss
 
         all_loss.backward()
         optimizer_g.step()
@@ -106,6 +107,12 @@ def Train_Stoch_Feat_MCD(args, G, F1, F2, train_source_dataloader, train_target_
         entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
         loss_dis = torch.mean(torch.abs(output_t1 - output_t2))
         F_loss = loss1 + loss2 - eta * loss_dis + args.lamda_ent * entropy_loss
+        sample_loss = 0
+        if epoch>4:
+            sample_loss = get_sample_loss(G, F1, F2, data_source, landmark_source, label_source)
+            print(f'Sample loss: {sample_loss.data.item()}')
+        F_loss += 0.1 * sample_loss
+        
         F_loss.backward()
         optimizer_f.step()
         # Step C train generator to minimize discrepancy
@@ -131,7 +138,7 @@ def Train_Stoch_Feat_MCD(args, G, F1, F2, train_source_dataloader, train_target_
             loss_dis.backward()
             optimizer_g.step()
 
-        print('Train Ep: {} [{}/{} ({:.0f}%)]\tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f}'.format(
+        print('Train Ep: {} [{}/{} ({:.0f}%)]\tLoss1: {:.6f}\tLoss2: {:.6f}\tDis: {:.6f} Entropy: {:.6f}'.format(
             epoch, batch_index * batch_size, 12000,
                    100. * batch_index / num_iter, loss1.data.item(), loss2.data.item(), loss_dis.data.item(),
             entropy_loss.data.item()))
@@ -203,8 +210,8 @@ def main():
     optimizer_g, lr = lr_scheduler_withoutDecay(optimizer_g, lr=args.lr)
     scheduler_g = optim.lr_scheduler.StepLR(optimizer_g, step_size=20, gamma=0.1, verbose=True)
     
-    F1 = Stochastic_Features_cls(args, hidden=args.n_hidden)
-    F2 = Stochastic_Features_cls(args, hidden=args.n_hidden)
+    F1 = Stochastic_Features_cls(args)
+    F2 = Stochastic_Features_cls(args)
     F1.cuda()
     F2.cuda()
     optimizer_f = optim.SGD(list(F1.parameters())+list(F2.parameters()), momentum=0.9, lr=0.001, weight_decay=0.0005)

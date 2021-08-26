@@ -1,4 +1,5 @@
 import argparse
+import os
 import matplotlib
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -8,6 +9,15 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.manifold import TSNE
 
+import matplotlib.pyplot as plt
+from matplotlib.legend_handler import HandlerBase
+
+
+class MarkerHandler(HandlerBase):
+    def create_artists(self, legend, tup,xdescent, ydescent,
+                        width, height, fontsize,trans):
+        return [plt.Line2D([width/2], [height/2.],ls="",
+                       marker=tup[1],color=tup[0], transform=trans)]
 
 class AverageMeter(object):
     '''Computes and stores the sum, count and average'''
@@ -173,7 +183,7 @@ def Show_Accuracy(acc, prec, recall, class_num=7):
     return Accuracy_Info, acc_avg, prec_avg, recall_avg, f1_avg
 
 
-def Visualization(figName, model, dataloader, useClassify=True, domain='Source'):
+def Visualization(args, figName, model, dataloader, useClassify=True, domain='Source'):
     '''Feature Visualization in Source/Target Domain.'''
 
     assert useClassify in [True, False], 'useClassify should be bool.'
@@ -235,7 +245,7 @@ def Visualization(figName, model, dataloader, useClassify=True, domain='Source')
     plt.savefig(fname='{}'.format(figName), format="pdf", bbox_inches='tight')
 
 
-def VisualizationForTwoDomain(figName, model, source_dataloader, target_dataloader, useClassify=True,
+def VisualizationForTwoDomain(args, figName, model, source_dataloader, target_dataloader, useClassify=True,
                               showClusterCenter=True):
     '''Feature Visualization in Source and Target Domain.'''
 
@@ -346,4 +356,50 @@ def VizFeatures(args, epoch, model, dataloaders):
                               useClassify=args.useClassify, showClusterCenter=False)
     VisualizationForTwoDomain('{}_test'.format(epoch), model, dataloaders['test_source'], dataloaders['test_target'],
                               useClassify=args.useClassify, showClusterCenter=False)
+    return
+
+def viz_tsne(args, Feature, Label):
+    # Using T-SNE
+    tsne = TSNE(n_components=2, init='pca', random_state=0, perplexity=30, early_exaggeration=10)
+    embedding = tsne.fit_transform(Feature)
+
+    # Draw Visualization of Feature
+    colors = {0: 'firebrick', 1: 'aquamarine', 2: 'goldenrod', 3: 'cadetblue', 4: 'saddlebrown', 5: 'yellowgreen',
+              6: 'navy'}
+    labels = {0: 'Surprised', 1: 'Fear', 2: 'Disgust', 3: 'Happy', 4: 'Sad', 5: 'Angry', 6: 'Neutral'}
+
+    data_min, data_max = np.min(embedding, 0), np.max(embedding, 0)
+    data_norm = (embedding - data_min) / (data_max - data_min)
+
+    fig = plt.figure()
+    ax = plt.subplot(111)
+
+    for i in range(7):
+        data_source_x, data_source_y = data_norm[Label == i+14][:, 0], data_norm[Label == i+14][:, 1]
+        source_scatter = plt.scatter(data_source_x, data_source_y, color="none", edgecolor=colors[i], s=5,
+                                     label=labels[i], marker="o", alpha=0.4, linewidth=0.5)
+
+    for i in range(7):
+        data_source_x, data_source_y = data_norm[Label == i][:, 0], data_norm[Label == i][:, 1]
+        source_test_scatter = plt.scatter(data_source_x, data_source_y, color=colors[i], edgecolor='black', s=15,
+                                     label=labels[i], marker="X", alpha=0.4, linewidth=0.5)
+    ax.legend(bbox_to_anchor = (1.05, 0.6))
+    
+    for i in range(7):
+        data_target_x, data_target_y = data_norm[Label == (i + 7)][:, 0], data_norm[Label == (i + 7)][:, 1]
+        target_scatter = plt.scatter(data_target_x, data_target_y, color=colors[i], edgecolor='black', s=15,
+                                     label=labels[i], marker="D", alpha=0.6, linewidth=0.3)
+
+    plt.title(f'{args.log}_tsne')
+
+    list_color  = ["c", "gold", "crimson"]
+    list_mak    = ["o","x","D"]
+    list_lab    = ['source train','source test','target']
+
+    ax.legend(list(zip(list_color,list_mak)), list_lab, 
+          handler_map={tuple:MarkerHandler()}, bbox_to_anchor = (1.05, 0.6))
+
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width * 0.8, box.height * 0.8])
+    plt.savefig(fname=os.path.join(args.out, f'{args.log}_tsne.pdf'), format="pdf", bbox_inches='tight')
     return

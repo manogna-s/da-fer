@@ -13,7 +13,7 @@ parser.add_argument('--GPU_ID', default='0', type=str, help='CUDA_VISIBLE_DEVICE
 parser.add_argument('--save_checkpoint', type=str2bool, default=False, help='whether to save checkpoint')
 
 # Dataset args
-parser.add_argument('--source', type=str, default='RAF', choices=['RAF', 'RAF_2class'])
+parser.add_argument('--source', type=str, default='RAF', choices=['RAF', 'RAF_2class', 'CK+', 'SFEW', 'JAFFE'])
 parser.add_argument('--target', type=str, default='AISIN',
                     choices=['JAFFE', 'AISIN', 'CK+', 'SFEW'])
 # set maximum no. of samples per class. Use to create balanced no. of samples.
@@ -39,16 +39,18 @@ parser.add_argument('--use_mcd', type=str2bool, default=False, help='whether to 
 parser.add_argument('--use_grl', type=str2bool, default=False, help='whether to use one step grl')
 parser.add_argument('--lamda_ent', type=float, default=0.01, help='weight for entropy loss')
 
-#STAR
+# STAR
 parser.add_argument('--use_star', type=str2bool, default=False, help='whether to use stochastic classifier')
 parser.add_argument('--use_stoch_bias', type=str2bool, default=False, help='whether to use stochastic bias in classifier')
 parser.add_argument('--var_rho', type=float, default=5, help='var=log(1+exp(-rho))')
 parser.add_argument('--n_hidden', type=int, default=-1, help='fc layer: 384>n_hidden>num_classes')
 parser.add_argument('--optimizer', type=str, default='sgd', choices=['sgd', 'adam'])
 
-#Stochastic features
+# Stochastic features
 parser.add_argument('--use_stoch_feats', type=str2bool, default=False, help='Use stochastic features')
 
+# Use SCN self attention
+parser.add_argument('--use_scn_attention', type=str2bool, default=False, help='Use self attention module of SCN')
 
 # Feature norm based DA methods
 parser.add_argument('--use_afn', type=str2bool, default=False, help='whether to use AFN Loss')
@@ -64,7 +66,7 @@ parser.add_argument('--test_batch', type=int, default=32, help='input batch size
 parser.add_argument('--lr', type=float, default=0.0001)
 parser.add_argument('--lr_ad', type=float, default=0.001)
 
-parser.add_argument('--epochs', type=int, default=50, help='number of epochs to train (default: 10)')
+parser.add_argument('--epochs', type=int, default=30, help='number of epochs to train (default: 10)')
 parser.add_argument('--momentum', type=float, default=0.5, help='SGD momentum (default: 0.5)')
 parser.add_argument('--weight_decay', type=float, default=0.0005, help='SGD weight decay (default: 0.0005)')
 

@@ -3,23 +3,30 @@ from torch.autograd import Variable
 
 from models.ResNet_stoch_feat import *
 from train_setup import *
+from torch.distributions.multivariate_normal import MultivariateNormal
 
 criterion = nn.CrossEntropyLoss()
 eta = 1.0
-num_k = 4
+num_k = 2
 n_samples = 5
 
-def get_sample_loss(G, F1, F2, data, landmark, target):
-    loss = 0
-    feat = G(data, landmark, sample=True)
-    for i in range(n_samples):
-        output = F1(feat)
-        loss += criterion(output, target)
-        output = F2(feat)
-        loss += criterion(output, target)
-    loss = loss/n_samples
-    return loss
+sigma_avg = 3 #5
+threshold = np.log(sigma_avg) + (1 + np.log(2 * np.pi)) / 2
 
+def get_sample_loss(G, F1, F2, data, landmark, target):
+    sample_loss = 0
+    feat, sigma = G(data, landmark)
+    mvn = MultivariateNormal(feat, scale_tril=torch.diag_embed(sigma))
+    print(threshold, mvn.entropy()/G.output_num())
+    loss_fu = torch.mean(nn.ReLU()(threshold - mvn.entropy()/G.output_num()))
+    for i in range(n_samples):
+        feat = mvn.rsample()
+        output = F1(feat)
+        sample_loss += criterion(output, target)
+        output = F2(feat)
+        sample_loss += criterion(output, target)
+    sample_loss = sample_loss/n_samples
+    return sample_loss, loss_fu
 
 def Train_Stoch_Feat_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader, optimizer_g, optimizer_f, epoch,
               writer):
@@ -29,7 +36,7 @@ def Train_Stoch_Feat_MCD(args, G, F1, F2, train_source_dataloader, train_target_
     F2.train()
     torch.autograd.set_detect_anomaly(True)
     batch_size = args.train_batch
-
+    
     m_total_loss, m_loss1, m_loss2, m_loss_dis, m_entropy_loss = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
 
     # Get Source/Target Dataloader iterator
@@ -61,7 +68,7 @@ def Train_Stoch_Feat_MCD(args, G, F1, F2, train_source_dataloader, train_target_
         landmark = Variable(torch.cat((landmark_source, landmark_target), 0))
         label_source = Variable(label_source)
 
-        output = G(data, landmark)
+        output, _ = G(data, landmark)
         output1 = F1(output)
         output2 = F2(output)
 
@@ -78,11 +85,13 @@ def Train_Stoch_Feat_MCD(args, G, F1, F2, train_source_dataloader, train_target_
         target1 = label_source
         loss1 = criterion(output_s1, target1)
         loss2 = criterion(output_s2, target1)
-        all_loss = loss1 + loss2 + args.lamda_ent * entropy_loss
+        all_loss = loss1 + loss2  #+ args.lamda_ent * entropy_loss
         sample_loss = 0
+        loss_fu = 0
         if epoch>4:
-            sample_loss = get_sample_loss(G, F1, F2, data_source, landmark_source, label_source)
-        all_loss += 0.1 * sample_loss
+            sample_loss, loss_fu = get_sample_loss(G, F1, F2, data_source, landmark_source, label_source)
+        # all_loss += 0.1 * sample_loss + args.lamda_ent * loss_fu
+        all_loss += 0.5 * sample_loss + 0.005 * loss_fu
 
         all_loss.backward()
         optimizer_g.step()
@@ -92,7 +101,7 @@ def Train_Stoch_Feat_MCD(args, G, F1, F2, train_source_dataloader, train_target_
         optimizer_g.zero_grad()
         optimizer_f.zero_grad()
 
-        output = G(data, landmark)
+        output, _ = G(data, landmark)
         output1 = F1(output)
         output2 = F2(output)
         output_s1 = output1[:batch_size, :]
@@ -109,16 +118,18 @@ def Train_Stoch_Feat_MCD(args, G, F1, F2, train_source_dataloader, train_target_
         F_loss = loss1 + loss2 - eta * loss_dis + args.lamda_ent * entropy_loss
         sample_loss = 0
         if epoch>4:
-            sample_loss = get_sample_loss(G, F1, F2, data_source, landmark_source, label_source)
-            print(f'Sample loss: {sample_loss.data.item()}')
-        F_loss += 0.1 * sample_loss
-        
+            sample_loss, loss_fu = get_sample_loss(G, F1, F2, data_source, landmark_source, label_source)
+        # F_loss += 0.1 * sample_loss + 0.001 * loss_fu
+        F_loss += 0.5 * sample_loss + 0.005 * loss_fu
+
+        print(f'Sample loss: {0.5 * sample_loss}, Feature uncertainty loss: {0.005 * loss_fu}')
+
         F_loss.backward()
         optimizer_f.step()
         # Step C train generator to minimize discrepancy
         for i in range(num_k):
             optimizer_g.zero_grad()
-            output = G(data, landmark)
+            output, _ = G(data, landmark)
             output1 = F1(output)
             output2 = F2(output)
 
@@ -183,10 +194,9 @@ def Test_Stoch_Feat_MCD(args, G, F1, F2, dataloaders, splits=None):
         for batch_index, (input, landmark, label) in enumerate(iter_dataloader):
             input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
             with torch.no_grad():
-                feat = G(input, landmark)
+                feat, _ = G(input, landmark)
                 output1 = F1(feat)
                 output2 = F2(feat)
-                # print(f'sigma of feature: {torch.exp(0.5 * F1.fc_logvar(feat))}')
                 
             Compute_Accuracy(args, output1, label, acc1, prec1, recall1)
             Compute_Accuracy(args, output2, label, acc2, prec2, recall2)
@@ -209,11 +219,28 @@ def main():
     dataloaders, G, optimizer_g, writer = train_setup(args)
     optimizer_g, lr = lr_scheduler_withoutDecay(optimizer_g, lr=args.lr)
     scheduler_g = optim.lr_scheduler.StepLR(optimizer_g, step_size=20, gamma=0.1, verbose=True)
-    
-    F1 = Stochastic_Features_cls(args)
-    F2 = Stochastic_Features_cls(args)
+    print(G)
+    F1 = Stochastic_Features_cls(args, input_dim=G.output_num())
+    F2 = Stochastic_Features_cls(args, input_dim=G.output_num())
     F1.cuda()
     F2.cuda()
+    print(F1)
+
+    G_ckpt= os.path.join(args.out, f'ckpts/Stoch_MCD_G.pkl')
+    if os.path.exists(G_ckpt):
+        checkpoint = torch.load (G_ckpt, map_location='cuda')
+        G.load_state_dict (checkpoint, strict=False)
+
+    F1_ckpt= os.path.join(args.out, f'ckpts/Stoch_MCD_F1.pkl')
+    if os.path.exists(F1_ckpt):
+        checkpoint = torch.load (F1_ckpt, map_location='cuda')
+        F1.load_state_dict (checkpoint, strict=False)
+
+    F2_ckpt= os.path.join(args.out, f'ckpts/Stoch_MCD_F2.pkl')
+    if os.path.exists(F2_ckpt):
+        checkpoint = torch.load (F2_ckpt, map_location='cuda')
+        F2.load_state_dict (checkpoint, strict=False)
+
     optimizer_f = optim.SGD(list(F1.parameters())+list(F2.parameters()), momentum=0.9, lr=0.001, weight_decay=0.0005)
     scheduler_f = optim.lr_scheduler.StepLR(optimizer_f, step_size=20, gamma=0.1, verbose=True)
 
@@ -229,7 +256,7 @@ def main():
         Test_Stoch_Feat_MCD(args, G, F1, F2, dataloaders, splits=['train_source', 'train_target', 'test_source', 'test_target'])
         if args.save_checkpoint:
             torch.save(G.state_dict(), os.path.join(args.out, f'ckpts/Stoch_MCD_G.pkl'))
-            torch.save(F1.state_dict(), os.path.join(args.out, f'ckpts/Stoch_MCD_F2.pkl'))
+            torch.save(F1.state_dict(), os.path.join(args.out, f'ckpts/Stoch_MCD_F1.pkl'))
             torch.save(F2.state_dict(), os.path.join(args.out, f'ckpts/Stoch_MCD_F2.pkl'))
 
     writer.close()

@@ -8,6 +8,8 @@ from utils.Loss import *
 from test import Test
 from train_setup import *
 
+def calc_coeff(iter_num, high=1.0, low=0.0, alpha=10.0, max_iter=10000.0):
+    return np.float(2.0 * (high - low) / (1.0 + np.exp(-alpha*iter_num / max_iter)) - (high - low) + low)
 
 def Train_MME(args, model, train_source_dataloader, train_target_dataloader, optimizer, epoch, writer):
     """Train."""
@@ -78,7 +80,10 @@ def Train_MME(args, model, train_source_dataloader, train_target_dataloader, opt
         optimizer.step()
 
         feat_target, out_target, loc_out_target = model(data_target, landmark_target)
-        mme_loss_ = MME(model, feat_target, lamda=args.lamda)
+
+        coeff = calc_coeff(epoch*num_iter+batch_index, 1.0, 0.0, 10, 10000)
+        print(coeff)
+        mme_loss_ = MME(model, feat_target, lamda=args.lamda, coeff=coeff)
 
         optimizer.zero_grad()
         with torch.autograd.detect_anomaly():
@@ -116,9 +121,7 @@ def Train_MME(args, model, train_source_dataloader, train_target_dataloader, opt
     Batch Time {batch_time.sum:.4f} ({batch_time.avg:.4f})
     Learning Rate {1}\n'''.format(epoch, lr, data_time=data_time, batch_time=batch_time)
 
-    LoggerInfo += AccuracyInfo
-
-    LoggerInfo += '''Acc_avg {0:.4f} Prec_avg {1:.4f} Recall_avg {2:.4f} F1_avg {3:.4f} 
+    LoggerInfo = '''Acc_avg {0:.4f} Prec_avg {1:.4f} Recall_avg {2:.4f} F1_avg {3:.4f} 
     Total Loss {loss:.4f} Global Cls Loss {global_cls_loss:.4f} Local Cls Loss {local_cls_loss:.4f} MME Loss {mme_loss:.4f}'''.format(
         acc_avg, prec_avg, recall_avg, f1_avg, loss=loss.avg, global_cls_loss=global_cls_loss.avg,
         local_cls_loss=local_cls_loss.avg, mme_loss=mme_loss.avg)

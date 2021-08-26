@@ -4,6 +4,8 @@ from utils.Utils import *
 from train_setup import *
 import time
 import collections
+from models.ResNet_feat import ResClassifier
+
 
 
 def Test(args, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='Target', split='test'):
@@ -46,10 +48,6 @@ def Test(args, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='
         end = time.time()
 
     AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
-
-    #LoggerInfo = AccuracyInfo
-    #LoggerInfo += '''    Acc_avg {0:.4f} Prec_avg {1:.4f} Recall_avg {2:.4f} F1_avg {3:.4f}
-    #Loss {loss:.4f}'''.format(acc_avg, prec_avg, recall_avg, f1_avg, loss=loss.avg)
 
     print(f'Loss: {loss.avg:.4f}')
 
@@ -130,13 +128,100 @@ def test_STAR(args, splits=None, n_classifiers=5):
                     recall[i].update(TP, np.int(label == i))
 
         AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
+    return
 
+def test(args, splits=None):
+    if splits is None:  # evaluate on test splits by default
+        splits = ['test_source', 'test_target']
+    args.train_batch = 1
+    args.test_batch = 1
+    dataloaders, G, _, _ = train_setup(args)
 
+    model = BuildModel(args)
+    
+    model_ckpt = torch.load(os.path.join(args.out,args.log+'_Accuracy.pkl'))
+    model.load_state_dict(model_ckpt)
+
+    model.eval()
+
+    Features = []
+    Labels = []
+    for split in splits:
+        print(f'\n[{split}]')
+        iter_dataloader = iter(dataloaders[split])
+        acc, prec, recall = [AverageMeter() for i in range(args.class_num)], \
+                            [AverageMeter() for i in range(args.class_num)], \
+                            [AverageMeter() for i in range(args.class_num)]
+        for batch_index, (input, landmark, label) in enumerate(iter_dataloader):
+            input, landmark, label = input.cuda(), landmark.cuda(), label
+            with torch.no_grad():
+                feature, output, loc_output = model(input, landmark)
+            Features.append(feature.cpu().data.numpy())
+            Label = label.cpu().data.numpy()+7 if 'target' in split else label.cpu().data.numpy()
+            Labels.append(Label)
+            Compute_Accuracy(args, output, label, acc, prec, recall)
+
+        AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
+
+    if args.show_feat:
+        Features = np.vstack(Features)
+        Labels = np.concatenate(Labels)
+        viz_tsne(args, Features, Labels)
+    return
+
+def test_MCD(args, splits=None):
+    if splits is None:  # evaluate on test splits by default
+        splits = ['test_source', 'test_target']
+    args.train_batch = 1
+    args.test_batch = 1
+    dataloaders, G, _, _ = train_setup(args)
+    
+    G_ckpt = torch.load(os.path.join(args.out,'ckpts', 'MCD_G.pkl'))
+    G.load_state_dict(G_ckpt)
+
+    F1 = ResClassifier(num_classes=args.class_num, num_layer=1)
+    F1_ckpt = torch.load(os.path.join(args.out,'ckpts', 'MCD_F1.pkl'))
+    F1.load_state_dict(F1_ckpt)
+    F1.cuda()
+
+    G.eval()
+    F1.eval()
+
+    Features = []
+    Labels = []
+    for split in splits:
+        print(f'\n[{split}]')
+        iter_dataloader = iter(dataloaders[split])
+        acc, prec, recall = [AverageMeter() for i in range(args.class_num)], \
+                            [AverageMeter() for i in range(args.class_num)], \
+                            [AverageMeter() for i in range(args.class_num)]
+        for batch_index, (input, landmark, label) in enumerate(iter_dataloader):
+            input, landmark, label = input.cuda(), landmark.cuda(), label
+            with torch.no_grad():
+                feature = G(input, landmark)
+                output = F1(feature)
+            Features.append(feature.cpu().data.numpy())
+            Label = label.cpu().data.numpy()+7 if 'target' in split else label.cpu().data.numpy()
+            Labels.append(Label)
+            Compute_Accuracy(args, output, label, acc, prec, recall)
+
+        AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
+
+    if args.show_feat:
+        Features = np.vstack(Features)
+        Labels = np.concatenate(Labels)
+        viz_tsne(args, Features, Labels)
     return
 
 def main():
     if args.use_star:
         test_STAR(args, splits = ['test_target'], n_classifiers=10)
+    elif args.use_mcd:
+        test_MCD(args)
+    else:
+        test(args)
+
+
     return
 
 if __name__ == '__main__':

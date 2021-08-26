@@ -7,8 +7,8 @@ from PIL import Image
 from models.AdversarialNetwork import RandomLayer, AdversarialNetwork
 from models.ResNet import IR_global_local, IR_global
 from models.ResNet_GCN import IR_GCN
-from models.ResNet_feat import IR_global_local_feat
-from models.ResNet_stoch_feat import IR_global_local_stoch_feat
+from models.ResNet_feat import IR_global_local_feat, IR_onlyResNet50
+from models.ResNet_stoch_feat import IR_global_local_stoch_feat, IR_onlyResNet50_stoch, IR_global_local_stoch_feat_384
 from models.ResNet_utils import load_resnet_pretrained_weights
 from utils.Dataset import MyDataset
 from utils.misc_utils import *
@@ -33,7 +33,16 @@ def BuildModel(args):
         else:
             print('MCD with only global feat not yet added')
     elif args.use_stoch_feats:
-        model = IR_global_local_stoch_feat(numOfLayer)
+        if args.n_hidden == 384:
+            print('384 model')
+            model = IR_global_local_stoch_feat_384(numOfLayer) 
+        elif args.local_feat:
+            model = IR_global_local_stoch_feat(numOfLayer) 
+        else:
+            print('Stochastic feats with global features only')
+            model = IR_onlyResNet50_stoch(numOfLayer)
+    elif args.use_scn_attention:
+        model = IR_onlyResNet50(numOfLayer)
     else:
         if args.local_feat:
             model = IR_global_local(numOfLayer, args.class_num)

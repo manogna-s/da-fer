@@ -54,87 +54,6 @@ class ResClassifier(nn.Module):
         x = self.classifier(x)
         return x
 
-
-class StochasticClassifier_2layer(nn.Module):
-    def __init__(self, args, input_dim=384, hidden=-1):
-        super(StochasticClassifier_2layer, self).__init__()
-        
-        self.classifiers = None
-        self.stoch_bias=args.use_stoch_bias
-
-        if hidden>0:
-            print(hidden, input_dim)
-            self.fc_weight = torch.zeros((hidden, input_dim))
-            self.fc_w_mu = Parameter(torch.empty_like(self.fc_weight, requires_grad=True))
-            self.fc_w_rho = Parameter(torch.empty_like(self.fc_weight, requires_grad=True))
-
-            self.fc_bias = torch.zeros(hidden)
-            self.fc_b_mu = Parameter(torch.empty_like(self.fc_bias, requires_grad=True))
-            self.fc_b_rho = Parameter(torch.empty_like(self.fc_bias, requires_grad=True))
-            # self.fc = nn.Linear(input_dim, hidden)
-        else:
-            self.fc = nn.Identity()
-            hidden = input_dim
-        self.weight = torch.zeros((args.class_num, hidden))
-
-
-        self.weight_mu = Parameter(torch.empty_like(self.weight, requires_grad=True))
-        self.weight_rho = Parameter(torch.empty_like(self.weight, requires_grad=True))
-
-        if self.stoch_bias:
-            print('Using stochastic bias')
-            self.bias = torch.zeros(args.class_num)
-            self.bias_mu = Parameter(torch.empty_like(self.bias, requires_grad=True))
-            self.bias_rho = Parameter(torch.empty_like(self.bias, requires_grad=True))
-        else:
-            self.bias = Parameter(torch.zeros(args.class_num))
-
-        nn.init.xavier_normal_(self.fc_w_mu)
-        nn.init.xavier_normal_(self.weight_mu)
-        nn.init.constant_(self.fc_w_rho, -args.var_rho)
-        nn.init.constant_(self.weight_rho, -args.var_rho)
-        nn.init.zeros_(self.fc_b_mu)
-        nn.init.zeros_(self.bias_mu)
-        nn.init.constant_(self.fc_b_rho, -args.var_rho)
-        nn.init.constant_(self.bias_rho, -args.var_rho)
-
-
-    def reparameterize(self, sample=False):
-        fc_weight_std =  torch.log(1+torch.exp(self.fc_w_rho)) 
-        fc_bias_std = torch.log(1+torch.exp(self.fc_b_rho)) 
-        
-        weight_std =  torch.log(1+torch.exp(self.weight_rho)) 
-        bias_std = torch.log(1+torch.exp(self.bias_rho)) 
-
-        if self.training or sample:
-            fc_w_eps = torch.rand_like(fc_weight_std)
-            fc_b_eps = torch.rand_like(fc_bias_std)
-
-            weight_eps = torch.randn_like(weight_std)
-            bias_eps = torch.randn_like(bias_std)
-        else:
-            fc_w_eps = torch.zeros_like(fc_weight_std)
-            fc_b_eps = torch.zeros_like(fc_bias_std)
-            weight_eps = torch.zeros_like(weight_std)
-            bias_eps = torch.zeros_like(bias_std)
-
-        self.fc_weight = self.fc_w_mu + fc_w_eps * fc_weight_std
-        self.weight = self.weight_mu + weight_eps * weight_std
-        
-        if self.stoch_bias:
-            self.fc_bias = self.fc_b_mu + fc_b_eps * fc_bias_std
-            self.bias = self.bias_mu + bias_eps * bias_std
-        return
-
-    def forward(self, x, reverse=False):
-        self.reparameterize()
-        x = F.linear(x, self.fc_weight, self.fc_bias)
-        if reverse:
-            x = grad_reverse(x)
-        out = F.linear(x, self.weight, self.bias)
-        return out
-
-
 class StochasticClassifier(nn.Module):
     def __init__(self, args, input_dim=384):
         super(StochasticClassifier, self).__init__()
@@ -206,63 +125,7 @@ class StochasticClassifier(nn.Module):
             preds.append(pred[0])
             # print(i, (probs*100).astype(int), pred)
         return preds, ent
-
-class Stochastic_Features_cls_v1(nn.Module):
-    def __init__(self, args, input_dim=384, hidden=-1):
-        super(Stochastic_Features_cls, self).__init__()
         
-        self.fc_mean = nn.Linear(input_dim, hidden)
-        self.fc_logvar = nn.Linear(input_dim, hidden)
-
-        self.fc_mean.apply(init_weights)
-        self.fc_logvar.apply(init_weights)
-
-        self.cls = nn.Linear(hidden, args.class_num)
-        self.cls.apply(init_weights)
-
-    def forward(self, x, reverse=False, sample=False):
-        if reverse:
-            x = grad_reverse(x)
-        feature = self.fc_mean(x)
-        if sample:
-            sigma = torch.exp(0.5 * self.fc_logvar(x)) 
-            feature = feature + sigma * torch.rand_like(sigma)
-            # entropy = (384 * (1 + np.log(2 * np.pi)) + torch.sum(torch.log(sigma), dim=-1))/2
-            entropy = torch.mean(torch.log(sigma), dim=-1)
-            print(torch.mean(sigma,dim=-1))
-        out = self.cls(feature)
-        return out
-        
-class Stochastic_Features_cls(nn.Module):
-    def __init__(self, args, input_dim=384, hidden=-1):
-        super(Stochastic_Features_cls, self).__init__()
-        
-        self.fc_mean = nn.Linear(input_dim, hidden)
-        self.fc_sigma = nn.Linear(input_dim, hidden)
-
-        self.fc_mean.apply(init_weights)
-        self.fc_sigma.apply(init_weights)
-
-        self.cls = nn.Linear(hidden, args.class_num)
-        self.cls.apply(init_weights)
-
-    def forward(self, x, reverse=False, sample=False):
-        if reverse:
-            x = grad_reverse(x)
-        feature = self.fc_mean(x)
-        if sample:
-            sigma = self.fc_sigma(x)
-            sigma = nn.ReLU()(sigma)
-            feature = feature + sigma * torch.rand_like(sigma)
-        if not self.training:
-            sigma = self.fc_sigma(x)
-            sigma = nn.ReLU()(sigma)
-            print(torch.mean(sigma,dim=-1))
-        out = self.cls(feature)
-        return out
-
-
-
 # Support: ['IR_18', 'IR_50']
 class Backbone_Global_Local_feat(nn.Module):
     def __init__(self, numOfLayer):
@@ -394,5 +257,64 @@ def IR_global_local_feat(numOfLayer):
     """Constructs a ir-18/ir-50 model."""
 
     model = Backbone_Global_Local_feat(numOfLayer)
+
+    return model
+
+
+class Backbone_onlyResNet50(nn.Module):
+    def __init__(self, numOfLayer):
+        super(Backbone_onlyResNet50, self).__init__()
+
+        unit_module = bottleneck_IR
+
+        self.input_layer = Sequential(
+            Conv2d(in_channels=3, out_channels=64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False),
+            BatchNorm2d(64), PReLU(64))
+
+        blocks = get_blocks(numOfLayer)
+        self.layer1 = Sequential(
+            *[unit_module(bottleneck.in_channel, bottleneck.depth, bottleneck.stride) for bottleneck in
+              blocks[0]])  # get_block(in_channel=64, depth=64, num_units=3)])
+        self.layer2 = Sequential(
+            *[unit_module(bottleneck.in_channel, bottleneck.depth, bottleneck.stride) for bottleneck in
+              blocks[1]])  # get_block(in_channel=64, depth=128, num_units=4)])
+        self.layer3 = Sequential(
+            *[unit_module(bottleneck.in_channel, bottleneck.depth, bottleneck.stride) for bottleneck in
+              blocks[2]])  # get_block(in_channel=128, depth=256, num_units=14)])
+        self.layer4 = Sequential(
+            *[unit_module(bottleneck.in_channel, bottleneck.depth, bottleneck.stride) for bottleneck in
+              blocks[3]])  # get_block(in_channel=256, depth=512, num_units=3)])
+
+        self.pool_layer = nn.AdaptiveAvgPool2d((1, 1))
+
+    def forward(self, imgs, locations):
+        featureMap = self.input_layer(imgs)
+
+        featureMap1 = self.layer1(featureMap)  # Batch * 64 * 56 * 56
+        featureMap2 = self.layer2(featureMap1)  # Batch * 128 * 28 * 28
+        featureMap3 = self.layer3(featureMap2)  # Batch * 256 * 14 * 14
+        featureMap4 = self.layer4(featureMap3)  # Batch * 512 * 7 * 7
+
+        feature = torch.flatten(self.pool_layer(featureMap4),1)
+        feature = feature.view(featureMap.size(0), -1)  # Batch * 512
+        return feature
+
+    def output_num(self):
+        return 512
+
+    def get_parameters(self):
+        parameter_list = [{"params": self.input_layer.parameters(), "lr_mult": 1, 'decay_mult': 2},
+                          {"params": self.layer1.parameters(), "lr_mult": 1, 'decay_mult': 2},
+                          {"params": self.layer2.parameters(), "lr_mult": 1, 'decay_mult': 2},
+                          {"params": self.layer3.parameters(), "lr_mult": 1, 'decay_mult': 2},
+                          {"params": self.layer4.parameters(), "lr_mult": 1, 'decay_mult': 2},
+                          ]
+        return parameter_list
+
+
+def IR_onlyResNet50(numOfLayer):
+    """Constructs a ir-18/ir-50 model."""
+
+    model = Backbone_onlyResNet50(numOfLayer)
 
     return model

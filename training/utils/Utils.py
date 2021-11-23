@@ -147,12 +147,12 @@ def BuildDataloader(args, split='train', domain='source', max_samples=-1, use_au
     if split == 'train':
         data_set = MyDataset(data_dict['img_paths'], data_dict['labels'], data_dict['bboxs'], data_dict['landmarks'], 
                             split, domain, trans, class_num=args.class_num, class_count=args.train_class_count)
-        # data_loader = data.DataLoader(dataset=data_set, batch_size=args.train_batch, shuffle=True, num_workers=8,
-        #                               drop_last=True)
-
-        train_sampler = ImbalancedDatasetSampler(data_set)
-        data_loader = data.DataLoader(dataset=data_set, sampler=train_sampler, batch_size=args.train_batch, num_workers=8,
+        data_loader = data.DataLoader(dataset=data_set, batch_size=args.train_batch, shuffle=True, num_workers=8,
                                       drop_last=True)
+
+        # train_sampler = ImbalancedDatasetSampler(data_set)
+        # data_loader = data.DataLoader(dataset=data_set, sampler=train_sampler, batch_size=args.train_batch, num_workers=8,
+        #                               drop_last=True)
     elif split == 'test':
         data_set = MyDataset(data_dict['img_paths'], data_dict['labels'], data_dict['bboxs'], data_dict['landmarks'], split, domain, trans)
 

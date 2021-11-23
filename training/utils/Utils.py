@@ -8,10 +8,12 @@ from models.AdversarialNetwork import RandomLayer, AdversarialNetwork
 from models.ResNet import IR_global_local, IR_global
 from models.ResNet_GCN import IR_GCN
 from models.ResNet_feat import IR_global_local_feat, IR_onlyResNet50
+from models.ResNet_mixstyle import IR_global_local_feat_mixstyle
 from models.ResNet_stoch_feat import IR_global_local_stoch_feat, IR_onlyResNet50_stoch, IR_global_local_stoch_feat_384
 from models.ResNet_utils import load_resnet_pretrained_weights
 from utils.Dataset import MyDataset
 from utils.misc_utils import *
+from utils.randaugument import * 
 import json
 
 def BuildModel(args):
@@ -29,7 +31,11 @@ def BuildModel(args):
                        args.use_cluster, args.class_num)
     elif args.use_mcd or args.use_star:
         if args.local_feat:
-            model = IR_global_local_feat(numOfLayer)
+            if args.use_mixstyle:
+                print('Using mixstyle')
+                model = IR_global_local_feat_mixstyle(numOfLayer)
+            else:
+                model = IR_global_local_feat(numOfLayer)
         else:
             print('MCD with only global feat not yet added')
     elif args.use_stoch_feats:
@@ -97,7 +103,7 @@ def get_dataset(split='train', dataset='RAF', max_samples=-1):
     return data
 
 
-def BuildDataloader(args, split='train', domain='source', max_samples=-1):
+def BuildDataloader(args, split='train', domain='source', max_samples=-1, use_aug=False):
     """Bulid data loader."""
 
     assert split in ['train', 'test'], 'Function BuildDataloader : function parameter flag1 wrong.'
@@ -109,6 +115,16 @@ def BuildDataloader(args, split='train', domain='source', max_samples=-1):
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
+
+    if use_aug:
+        print('Using color jitter augmentations')
+        aug_train_transform = transforms.Compose([
+                transforms.Resize((args.face_scale, args.face_scale)),
+                RandAugment_ColorJitter(n=1, m=10),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+        trans = aug_train_transform
 
     if domain == 'source':
         dataset = args.source
@@ -126,17 +142,84 @@ def BuildDataloader(args, split='train', domain='source', max_samples=-1):
     print("Dataset Distribution for %s classes is: " % (args.class_num), dataset_dist)
 
     # DataSet
-    data_set = MyDataset(data_dict['img_paths'], data_dict['labels'], data_dict['bboxs'], data_dict['landmarks'], split, domain, trans)
 
     # DataLoader
     if split == 'train':
-        data_loader = data.DataLoader(dataset=data_set, batch_size=args.train_batch, shuffle=True, num_workers=8,
+        data_set = MyDataset(data_dict['img_paths'], data_dict['labels'], data_dict['bboxs'], data_dict['landmarks'], 
+                            split, domain, trans, class_num=args.class_num, class_count=args.train_class_count)
+        # data_loader = data.DataLoader(dataset=data_set, batch_size=args.train_batch, shuffle=True, num_workers=8,
+        #                               drop_last=True)
+
+        train_sampler = ImbalancedDatasetSampler(data_set)
+        data_loader = data.DataLoader(dataset=data_set, sampler=train_sampler, batch_size=args.train_batch, num_workers=8,
                                       drop_last=True)
     elif split == 'test':
+        data_set = MyDataset(data_dict['img_paths'], data_dict['labels'], data_dict['bboxs'], data_dict['landmarks'], split, domain, trans)
+
         data_loader = data.DataLoader(dataset=data_set, batch_size=args.test_batch, shuffle=False, num_workers=8,
                                       drop_last=False)
 
     return data_loader
 
+
+def Build_AugDataloader(args, split='train', domain='source', max_samples=-1, aug_transform='Contrast'):
+    """Bulid data loader."""
+
+    assert split in ['train', 'test'], 'Function BuildDataloader : function parameter flag1 wrong.'
+    assert domain in ['source', 'target'], 'Function BuildDataloader : function parameter flag2 wrong.'
+
+    # Set Transform
+    trans = transforms.Compose([
+        transforms.Resize((args.face_scale, args.face_scale)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+
+    print('Using color jitter augmentations')
+
+    transform_dict={'Autocontrast':RandAugment_AutoContrast(n=1,m=10), 
+                    'Brightness':RandAugment_Brightness(n=1,m=10),
+                    'Color':RandAugment_Color(n=1,m=10),
+                    'Contrast':RandAugment_Contrast(n=1,m=10)}
+
+    aug_transform = transforms.Compose([
+                transforms.Resize((args.face_scale, args.face_scale)),
+                transform_dict[aug_transform],
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+    trans = aug_transform
+
+    if domain == 'source':
+        dataset = args.source
+    elif domain == 'target':
+        dataset = args.target
+    data_dict = get_dataset(split=split, dataset = dataset, max_samples=max_samples)
+
+    # DataSet Distribute
+    distribute_ = np.array(data_dict['labels'])
+    print(' %s %s dataset qty: %d' % (split, domain, len(data_dict['img_paths'])))
+    dataset_dist = []
+    for i in range(args.class_num):
+        dataset_dist.append(np.sum(distribute_ == i))
+
+    print("Dataset Distribution for %s classes is: " % (args.class_num), dataset_dist)
+
+    # DataSet
+
+    # DataLoader
+    if split == 'train':
+        data_set = MyDataset(data_dict['img_paths'], data_dict['labels'], data_dict['bboxs'], data_dict['landmarks'], 
+                            split, domain, trans, class_num=args.class_num, class_count=args.train_class_count)
+        data_loader = data.DataLoader(dataset=data_set, batch_size=args.train_batch, shuffle=True, num_workers=8,
+                                      drop_last=True)
+    elif split == 'test':
+        data_set = MyDataset(data_dict['img_paths'], data_dict['labels'], data_dict['bboxs'], data_dict['landmarks'], split, domain, trans)
+
+        data_loader = data.DataLoader(dataset=data_set, batch_size=args.test_batch, shuffle=False, num_workers=8,
+                                      drop_last=False)
+
+    return data_loader
 
 

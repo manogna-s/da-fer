@@ -4,6 +4,89 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sklearn.utils.class_weight import compute_class_weight 
+
+cls_num_list= np.array([1259, 262, 713, 4705, 1885, 682, 2465])
+# class_weights = np.sum(cls_num_list)/(7 * cls_num_list)
+# class_weights= torch.tensor(class_weights,dtype=torch.float).cuda()
+
+beta = 0.9999
+effective_num = 1.0 - np.power(beta, cls_num_list)
+per_cls_weights = (1.0 - beta) / np.array(effective_num)
+per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+class_weights = torch.FloatTensor(per_cls_weights).cuda()
+
+# class FocalLoss(nn.Module):
+
+#     def __init__(self, gamma=0, eps=1e-7):
+#         super(FocalLoss, self).__init__()
+#         self.gamma = gamma
+#         self.eps = eps
+#         self.ce = torch.nn.CrossEntropyLoss(reduction='none')
+
+#     def forward(self, input, target):
+#         logp = self.ce(input, target)
+#         p = torch.exp(-logp)
+#         loss = (1 - p) ** self.gamma * logp
+#         return loss.mean()
+
+# class WeightedFocalLoss(nn.Module):
+
+#     def __init__(self, gamma=1, eps=1e-7):
+#         super(WeightedFocalLoss, self).__init__()
+#         self.gamma = gamma
+#         self.eps = eps
+#         self.ce = torch.nn.CrossEntropyLoss(reduction='none', weight=class_weights)
+#         print(f'Class weights= {class_weights}')
+
+#     def forward(self, input, target):
+#         logp = self.ce(input, target)
+#         p = torch.exp(-logp)
+#         loss = (1 - p) ** self.gamma * logp
+#         return loss.mean()
+
+def focal_loss(input_values, gamma):
+    """Computes the focal loss"""
+    p = torch.exp(-input_values)
+    loss = (1 - p) ** gamma * input_values
+    return loss.mean()
+
+class FocalLoss(nn.Module):
+    def __init__(self, weight=None, gamma=0.):
+        super(FocalLoss, self).__init__()
+        assert gamma >= 0
+        self.gamma = gamma
+        self.weight = weight
+
+    def forward(self, input, target):
+        return focal_loss(F.cross_entropy(input, target, reduction='none', weight=self.weight), self.gamma)
+
+class LDAMLoss(nn.Module):
+    
+    def __init__(self, cls_num_list, max_m=0.3, weight=None, s=30):
+        super(LDAMLoss, self).__init__()
+        m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
+        m_list = m_list * (max_m / np.max(m_list))
+        m_list = torch.cuda.FloatTensor(m_list)
+        self.m_list = m_list
+        print(f'LDAM Margins: {self.m_list}')
+        assert s > 0
+        self.s = 1 #s
+        self.weight = weight
+
+    def forward(self, x, target):
+        index = torch.zeros_like(x, dtype=torch.uint8)
+        index.scatter_(1, target.data.view(-1, 1), 1)
+        
+        index_float = index.type(torch.cuda.FloatTensor)
+        batch_m = torch.matmul(self.m_list[None, :], index_float.transpose(0,1))
+        batch_m = batch_m.view((-1, 1))
+        # print(x, batch_m)
+        x_m = x - batch_m
+    
+        output = torch.where(index, x_m, x)
+        return F.cross_entropy(self.s*output, target, weight=self.weight)
+
 
 def Entropy(input_):
     return torch.sum(-input_ * torch.log(input_ + 1e-5), dim=1)

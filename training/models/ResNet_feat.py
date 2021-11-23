@@ -170,6 +170,7 @@ class Backbone_Global_Local_feat(nn.Module):
             nn.Conv2d(in_channels=512, out_channels=64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)), nn.ReLU()]
         self.Crop_Net = nn.ModuleList([copy.deepcopy(nn.Sequential(*cropNet_modules)) for i in range(5)])
         self.GAP = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Sequential(nn.Linear(384,384), nn.ReLU()) #nn.Sequential(nn.Linear(384,384), nn.BatchNorm1d(384), nn.ReLU())
 
     def classify(self, imgs, locations):
 
@@ -185,11 +186,39 @@ class Backbone_Global_Local_feat(nn.Module):
         feature = torch.cat((global_feature, loc_feature), 1)  # Batch * (64+320)
 
         feature = feature.view(feature.size(0), -1).narrow(1, 0, 64 + 320)  # Batch * (64+320)
+        feature = self.fc(feature)
         return feature
 
     def forward(self, imgs, locations, useClassify=True):
 
         return self.classify(imgs, locations)
+
+    def get_style_features(self, imgs, locations, layer='res3'):
+        featureMap = self.input_layer(imgs)
+        x = self.layer1(featureMap)  # Batch * 64 * 56 * 56
+        feat_dim=64
+        if layer == 'res2':
+            x = self.layer2(x)
+            feat_dim=128
+        if layer == 'res3':
+            x = self.layer2(x)
+            x = self.layer3(x)
+            feat_dim=256
+        if layer == 'res4':
+            x = self.layer2(x)
+            x = self.layer3(x)
+            x = self.layer4(x)
+            feat_dim=512
+
+        mu = x.mean(dim=[2, 3], keepdim=True)
+        var = x.var(dim=[2, 3], keepdim=True)
+        sig = (var + 1e-6).sqrt()
+        mu, sig = mu.detach(), sig.detach()
+        mu = mu.view(mu.size(0), -1).narrow(1, 0, feat_dim)
+        sig = sig.view(sig.size(0), -1).narrow(1, 0, feat_dim)
+        style_feature = mu
+        # style_feature = torch.cat((mu, sig), dim=1)
+        return style_feature
 
     def output_num(self):
         return 64 * 6
@@ -197,7 +226,7 @@ class Backbone_Global_Local_feat(nn.Module):
     def get_parameters(self):
         parameter_list = [{'params':list(self.input_layer.parameters())+list(self.layer1.parameters())+list(self.layer2.parameters())+
                             list(self.layer3.parameters())+list(self.layer4.parameters()), 'lr_mult':1, 'decay_mult':2},
-                          {'params':list(self.output_layer.parameters())+list(self.Crop_Net.parameters()), 'lr_mult':10, 'decay_mult':2}]
+                          {'params':list(self.output_layer.parameters())+list(self.Crop_Net.parameters())+list(self.fc.parameters()), 'lr_mult':10, 'decay_mult':2}] #
         return parameter_list
 
     def crop_featureMap(self, featureMap, locations):

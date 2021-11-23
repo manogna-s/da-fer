@@ -88,14 +88,14 @@ def TrainOnSource(args, model, train_dataloader, optimizer, epoch, writer):
 
     AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
 
-    writer.add_scalar('Accuracy', acc_avg, epoch)
-    writer.add_scalar('Precision', prec_avg, epoch)
-    writer.add_scalar('Recall', recall_avg, epoch)
-    writer.add_scalar('F1', f1_avg, epoch)
+    # writer.add_scalar('Accuracy', acc_avg, epoch)
+    # writer.add_scalar('Precision', prec_avg, epoch)
+    # writer.add_scalar('Recall', recall_avg, epoch)
+    # writer.add_scalar('F1', f1_avg, epoch)
 
-    writer.add_scalar('Global_Cls_Loss', global_cls_loss.avg, epoch)
-    writer.add_scalar('Local_Cls_Loss', local_cls_loss.avg, epoch)
-    writer.add_scalar('AFN_Loss', afn_loss.avg, epoch)
+    # writer.add_scalar('Global_Cls_Loss', global_cls_loss.avg, epoch)
+    # writer.add_scalar('Local_Cls_Loss', local_cls_loss.avg, epoch)
+    # writer.add_scalar('AFN_Loss', afn_loss.avg, epoch)
 
     LoggerInfo = '''
     \n[Training]: 
@@ -115,7 +115,6 @@ def TrainOnSource(args, model, train_dataloader, optimizer, epoch, writer):
 
 def main():
     """Main."""
-
     # Parse Argument
     torch.manual_seed(args.seed)
 
@@ -123,11 +122,20 @@ def main():
     print_experiment_info(args)
 
     dataloaders, model, optimizer, writer = train_setup(args)
+    # writer = SummaryWriter(os.path.join(args.out, args.log)) #throws seg fault core dumped
 
     # Save Best Checkpoint
     Best_Accuracy = 0
     Best_Recall = 0
 
+    args.train_batch=1
+    train_src_1 = BuildDataloader(args, split='train', domain='source', max_samples=args.source_labeled)
+    train_target_1 = BuildDataloader(args, split='train', domain='target', max_samples=args.target_unlabeled)
+    args.train_batch=32
+
+    # Init Mean if using GCN
+    if args.use_gcn:
+        init_gcn(args, train_src_1, train_target_1, model)
     # Running Experiment
     print("Training only on source domain...")
 
@@ -136,17 +144,18 @@ def main():
             VizFeatures(args, epoch, model, dataloaders)
 
         if args.use_gcn and args.use_cluster and epoch % 10 == 0:
-            Initialize_Mean_Cluster(args, model, True)
+            Initialize_Mean_Cluster(args, train_src_1, train_target_1, model, useClassify=True) #Initialize_Mean_Cluster(args, model, True)
             torch.cuda.empty_cache()
         TrainOnSource(args, model, dataloaders['train_source'], optimizer, epoch, writer)
 
         print('[Testing]')
-        Best_Accuracy, Best_Recall = Test(args, model, dataloaders['train_source'], Best_Accuracy, Best_Recall,
-                                          domain='Target', split='unlabeled train')
-        Test(args, model, dataloaders['train_target'], Best_Accuracy, Best_Recall, domain='Source', split='train')
-        Test(args, model, dataloaders['test_source'], Best_Accuracy, Best_Recall, domain='Source', split='test')
-        Test(args, model, dataloaders['test_target'], Best_Accuracy, Best_Recall, domain='Target', split='test')
 
+        Test(args, epoch, model, dataloaders['train_source'], Best_Accuracy, Best_Recall, domain='Source', split='train')
+        Best_Accuracy, Best_Recall = Test(args, epoch, model, dataloaders['train_target'], Best_Accuracy, Best_Recall,
+                                          domain='Target', split='unlabeled train')
+        Test(args, epoch, model, dataloaders['test_source'], Best_Accuracy, Best_Recall, domain='Source', split='test')
+        Test(args, epoch, model, dataloaders['test_target'], Best_Accuracy, Best_Recall, domain='Target', split='test')
+        torch.save(model.state_dict(), os.path.join(args.out, 'ckpts', f'gcn_src_model_{epoch}.pkl'))
         torch.cuda.empty_cache()
 
     writer.close()

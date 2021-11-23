@@ -1,48 +1,11 @@
 from torch.utils.tensorboard import SummaryWriter
-
+import torch.nn.functional as F
 from models.AdversarialNetwork import calc_coeff
 from models.GCN_utils import *
 from utils.Loss import Entropy, DANN, CDAN, HAFN, SAFN
 from test import Test
 from train_setup import *
 
-def plot_tsne(args, model, dataloaders):
-    """Test."""
-    splits =  ['train_source','test_target']
-
-    model.eval()
-    torch.autograd.set_detect_anomaly(True)
-
-    Features = []
-    Labels = []
-    for split in splits:
-        iter_dataloader = iter(dataloaders[split])
-
-        acc, prec, recall = [AverageMeter() for i in range(args.class_num)], \
-                            [AverageMeter() for i in range(args.class_num)], \
-                            [AverageMeter() for i in range(args.class_num)]
-
-        for batch_index, (input, landmark, label) in enumerate(iter_dataloader):
-            input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
-            with torch.no_grad():
-                feature, output, loc_output = model(input, landmark)
-
-            # Compute accuracy, precision and recall
-            Compute_Accuracy(args, output, label, acc, prec, recall)
-            Features.append(feature.cpu().data.numpy())
-            Label = label.cpu().data.numpy()
-            if split == 'test_target':
-                Label+=7
-            elif split == 'train_source':
-                Label+=14
-            Labels.append(Label)
-
-        AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
-    Features = np.vstack(Features)
-    Labels = np.concatenate(Labels)
-    viz_tsne_dann(args, Features, Labels)
-
-    return
 
 def Train_DANN(args, model, ad_net, random_layer, train_source_dataloader, train_target_dataloader, optimizer, optimizer_ad,
           epoch, writer):
@@ -55,6 +18,7 @@ def Train_DANN(args, model, ad_net, random_layer, train_source_dataloader, train
                         [AverageMeter() for i in range(args.class_num)], \
                         [AverageMeter() for i in range(args.class_num)]
     loss, global_cls_loss, local_cls_loss, afn_loss, dan_loss = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    ent_loss = AverageMeter()
     data_time, batch_time = AverageMeter(), AverageMeter()
 
     if args.use_dan:
@@ -136,6 +100,10 @@ def Train_DANN(args, model, ad_net, random_layer, train_source_dataloader, train
         if args.use_dan:
             loss_ += dan_loss_
 
+        target_preds = F.softmax(output[args.train_batch:, :])
+        entropy_loss_ = -torch.mean(torch.log(torch.mean(target_preds, 0) + 1e-6))
+        loss_ += 0.01 * entropy_loss_
+
         # Log Adversarial Network Accuracy
         if args.use_dan:
             if args.dan_method == 'CDAN' or args.dan_method == 'CDAN-E':
@@ -177,6 +145,8 @@ def Train_DANN(args, model, ad_net, random_layer, train_source_dataloader, train
         local_cls_loss.update(float(local_cls_loss_.cpu().data.item()) if args.local_feat else 0)
         afn_loss.update(float(afn_loss_.cpu().data.item()) if args.use_afn else 0)
         dan_loss.update(float(dan_loss_.cpu().data.item()) if args.use_dan else 0)
+        ent_loss.update(float(entropy_loss_.cpu().data.item()) if args.use_dan else 0)
+
 
         writer.add_scalar('Glocal_Cls_Loss', float(global_cls_loss_.cpu().data.item()),
                           num_iter * (epoch - 1) + batch_index)
@@ -207,10 +177,10 @@ def Train_DANN(args, model, ad_net, random_layer, train_source_dataloader, train
         writer.add_scalar('AdversarialNetwork_Accuracy', num_ADNet / (2.0 * args.train_batch * num_iter), epoch)
 
     LoggerInfo = '''    AdversarialNet Acc {0:.4f} Acc_avg {1:.4f} Prec_avg {2:.4f} Recall_avg {3:.4f} F1_avg {4:.4f}
-    Total Loss {loss:.4f} Global Cls Loss {global_cls_loss:.4f} Local Cls Loss {local_cls_loss:.4f} AFN Loss {afn_loss:.4f} DAN Loss {dan_loss:.4f}'''.format(
+    Total Loss {loss:.4f} Global Cls Loss {global_cls_loss:.4f} Local Cls Loss {local_cls_loss:.4f} AFN Loss {afn_loss:.4f} DAN Loss {dan_loss:.4f} ENT loss {ent_loss:.4f}'''.format(
         num_ADNet / (2.0 * args.train_batch * num_iter) if args.use_dan else 0, acc_avg, prec_avg, recall_avg, f1_avg,
         loss=loss.avg, global_cls_loss=global_cls_loss.avg, local_cls_loss=local_cls_loss.avg,
-        afn_loss=afn_loss.avg if args.use_afn else 0, dan_loss=dan_loss.avg if args.use_dan else 0)
+        afn_loss=afn_loss.avg if args.use_afn else 0, dan_loss=dan_loss.avg if args.use_dan else 0, ent_loss=ent_loss.avg)
 
     print(LoggerInfo)
     return
@@ -220,42 +190,16 @@ def main():
     """Main."""
     # Parse Argument
     torch.manual_seed(args.seed)
-    torch.backends.cudnn.enabled=False
 
     # Experiment Information
     print_experiment_info(args)
 
     dataloaders, model, optimizer, writer = train_setup(args)
-    writer = SummaryWriter(os.path.join(args.out, args.log))
-
 
     # Bulid Adversarial Network
     print('Building Adversarial Network...')
     random_layer, ad_net = BuildAdversarialNetwork(args, model.output_num(), args.class_num) if args.use_dan else (
     None, None)
-
-    model_ckpt= os.path.join(args.out, '/home/manogna/da-fer/training/gcn/raf/ckpts/gcn_src_model_15.pkl')
-    checkpoint = torch.load (model_ckpt, map_location='cuda')
-    model.load_state_dict (checkpoint, strict=True)
-
-    if 1: #args.show_feat:
-        # model_ckpt= os.path.join(args.out, 'gcn/sfew/ckpts/model_9.pkl')
-        # adnet_ckpt = os.path.join(args.out, 'gcn/sfew/ckpts/ad_net_9.pkl')
-        # if os.path.exists(model_ckpt):
-        #     checkpoint = torch.load (model_ckpt, map_location='cuda')
-        #     model.load_state_dict (checkpoint, strict=True)
-        #     ad_ckpt = torch.load (adnet_ckpt, map_location='cuda')
-        #     ad_net.load_state_dict(ad_ckpt, strict=True)
-        args.train_batch=1
-        train_src_1 = BuildDataloader(args, split='train', domain='source', max_samples=args.source_labeled)
-        train_target_1 = BuildDataloader(args, split='train', domain='target', max_samples=args.target_unlabeled)
-        args.train_batch=32
-        # plot_tsne(args, model, dataloaders)
-        #return
-
-    # Init Mean if using GCN
-    if args.use_gcn:
-        init_gcn(args, train_src_1, train_target_1, model)
 
     param_optim_ad = Set_Param_Optim(args, ad_net) if args.use_dan else None
     optimizer_ad = Set_Optimizer(args, param_optim_ad, args.lr, args.weight_decay,
@@ -274,21 +218,17 @@ def main():
             VizFeatures(args, epoch, model, dataloaders)
 
         if args.use_gcn and args.use_cluster and epoch % 10 == 0:
-            print(f'mean init at {epoch}')
-            Initialize_Mean_Cluster(args, train_src_1, train_target_1, model, useClassify=False)
-        #     Initialize_Mean_Cluster(args, dataloaders['train_source'], dataloaders['train_target'], model, useClassify=False) #(args, model, False)
-        #     torch.cuda.empty_cache()
+            Initialize_Mean_Cluster(args, model, False)
+            torch.cuda.empty_cache()
 
         Train_DANN(args, model, ad_net, random_layer, dataloaders['train_source'], dataloaders['train_target'], optimizer,
                   optimizer_ad, epoch, writer)
         print('\n[Testing...]')
-        Test(args, epoch, model, dataloaders['train_source'], domain='Source', split='train')
-        Best_Accuracy, Best_Recall = Test(args, epoch, model, dataloaders['train_target'], Best_Accuracy, Best_Recall,
+        Test(args, model, dataloaders['train_source'], domain='Source', split='train')
+        Best_Accuracy, Best_Recall = Test(args, model, dataloaders['train_target'], Best_Accuracy, Best_Recall,
                                           domain='Target', split='unlabeled train')
-        Test(args, epoch, model, dataloaders['test_source'], domain='Source', split='test')
-        Test(args, epoch, model, dataloaders['test_target'], domain='Target', split='test')
-        torch.save(model.state_dict(), os.path.join(args.out, 'ckpts', f'model_{epoch}.pkl'))
-        torch.save(ad_net.state_dict(), os.path.join(args.out, 'ckpts', f'ad_net_{epoch}.pkl'))
+        Test(args, model, dataloaders['test_source'], domain='Source', split='test')
+        Test(args, model, dataloaders['test_target'], domain='Target', split='test')
 
     writer.close()
 

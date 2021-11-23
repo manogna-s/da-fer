@@ -8,7 +8,7 @@ from models.ResNet_feat import ResClassifier
 
 
 
-def Test(args, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='Target', split='test'):
+def Test(args, epoch, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='Target', split='test'):
     """Test."""
 
     print(f'\n[{domain} {split} set]')
@@ -59,18 +59,18 @@ def Test(args, model, dataloader, Best_Accuracy=None, Best_Recall=None, domain='
 
             if args.save_checkpoint:
                 if isinstance(model, nn.DataParallel):
-                    torch.save(model.module.state_dict(), os.path.join(args.out, '{}_Recall.pkl'.format(args.log)))
+                    torch.save(model.module.state_dict(), os.path.join(args.out, f'Best_Recall_{epoch}.pkl'))
                 else:
-                    torch.save(model.state_dict(), os.path.join(args.out, '{}_Recall.pkl'.format(args.log)))
+                    torch.save(model.state_dict(), os.path.join(args.out, f'Best_Recall.pkl'))
 
         if acc_avg > Best_Accuracy:
             Best_Accuracy = acc_avg
             print('[Save] Best Accuracy: %.4f.' % Best_Accuracy)
             if args.save_checkpoint:
                 if isinstance(model, nn.DataParallel):
-                    torch.save(model.module.state_dict(), os.path.join(args.out, '{}_Accuracy.pkl'.format(args.log)))
+                    torch.save(model.module.state_dict(), os.path.join(args.out, f'Best_Accuracy_{epoch}.pkl'))
                 else:
-                    torch.save(model.state_dict(), os.path.join(args.out, '{}_Accuracy.pkl'.format(args.log)))
+                    torch.save(model.state_dict(), os.path.join(args.out, f'Best_Accuracy_{epoch}.pkl'))
 
     return Best_Accuracy, Best_Recall
 

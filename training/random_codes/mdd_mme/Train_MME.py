@@ -82,7 +82,7 @@ def Train_MME(args, model, train_source_dataloader, train_target_dataloader, opt
         feat_target, out_target, loc_out_target = model(data_target, landmark_target)
 
         coeff = calc_coeff(epoch*num_iter+batch_index, 1.0, 0.0, 10, 10000)
-        print(coeff)
+        # print(coeff)
         mme_loss_ = MME(model, feat_target, lamda=args.lamda, coeff=coeff)
 
         optimizer.zero_grad()
@@ -99,20 +99,20 @@ def Train_MME(args, model, train_source_dataloader, train_target_dataloader, opt
         local_cls_loss.update(float(local_cls_loss_.cpu().data.item()) if args.local_feat else 0)
         mme_loss.update(float(mme_loss_.cpu().data.item()))
 
-        writer.add_scalar('Global_Cls_Loss', float(global_cls_loss_.cpu().data.item()),
-                          num_iter * (epoch - 1) + batch_index)
-        writer.add_scalar('Local_Cls_Loss', float(local_cls_loss_.cpu().data.item()) if args.local_feat else 0,
-                          num_iter * (epoch - 1) + batch_index)
-        writer.add_scalar('MME_Loss', float(mme_loss_.cpu().data.item()), num_iter * (epoch - 1) + batch_index)
+        # writer.add_scalar('Global_Cls_Loss', float(global_cls_loss_.cpu().data.item()),
+        #                   num_iter * (epoch - 1) + batch_index)
+        # writer.add_scalar('Local_Cls_Loss', float(local_cls_loss_.cpu().data.item()) if args.local_feat else 0,
+        #                   num_iter * (epoch - 1) + batch_index)
+        # writer.add_scalar('MME_Loss', float(mme_loss_.cpu().data.item()), num_iter * (epoch - 1) + batch_index)
 
         end = time.time()
 
     AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
 
-    writer.add_scalar('Accuracy', acc_avg, epoch)
-    writer.add_scalar('Precision', prec_avg, epoch)
-    writer.add_scalar('Recall', recall_avg, epoch)
-    writer.add_scalar('F1', f1_avg, epoch)
+    # writer.add_scalar('Accuracy', acc_avg, epoch)
+    # writer.add_scalar('Precision', prec_avg, epoch)
+    # writer.add_scalar('Recall', recall_avg, epoch)
+    # writer.add_scalar('F1', f1_avg, epoch)
 
     LoggerInfo = '''
     [Train]:
@@ -129,6 +129,45 @@ def Train_MME(args, model, train_source_dataloader, train_target_dataloader, opt
     print(LoggerInfo)
     return
 
+def plot_tsne(args, model, dataloaders):
+    """Test."""
+    splits = ['test_target']#['train_source', 'test_target']
+
+    model.eval()
+    torch.autograd.set_detect_anomaly(True)
+
+    Features = []
+    Labels = []
+    for split in splits:
+        iter_dataloader = iter(dataloaders[split])
+
+        acc, prec, recall = [AverageMeter() for i in range(args.class_num)], \
+                            [AverageMeter() for i in range(args.class_num)], \
+                            [AverageMeter() for i in range(args.class_num)]
+
+        for batch_index, (input, landmark, label) in enumerate(iter_dataloader):
+            input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
+            with torch.no_grad():
+                feature, output, loc_output = model(input, landmark)
+
+            # Compute accuracy, precision and recall
+            Compute_Accuracy(args, output, label, acc, prec, recall)
+            Features.append(feature.cpu().data.numpy())
+            Label = label.cpu().data.numpy()
+            if split == 'test_target':
+                Label+=7
+            elif split == 'train_source':
+                Label+=14
+            Labels.append(Label)
+
+        AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc, prec, recall, args.class_num)
+    Features = np.vstack(Features)
+    Labels = np.concatenate(Labels)
+    viz_tsne(args, Features, Labels)
+
+    return
+ 
+
 
 def main():
     """Main."""
@@ -139,6 +178,14 @@ def main():
 
     dataloaders, model, optimizer, writer = train_setup(args)
 
+    if args.show_feat:
+        model_ckpt= os.path.join(args.out, f'ckpts/Best_Accuracy.pkl')
+        if os.path.exists(model_ckpt):
+            checkpoint = torch.load (model_ckpt, map_location='cuda')
+            model.load_state_dict (checkpoint, strict=False)
+        plot_tsne(args, model, dataloaders)
+        return
+
     # Save Best Checkpoint
     Best_Accuracy, Best_Recall = 0, 0
 
@@ -148,13 +195,12 @@ def main():
         Train_MME(args, model, dataloaders['train_source'], dataloaders['train_target'], optimizer, epoch, writer)
         print('\nEvaluating train sets:')
         Test(args, model, dataloaders['train_source'], domain='Source', split='train')
-        Best_Accuracy, Best_Recall = Test(args, model, dataloaders['train_target'], Best_Accuracy, Best_Recall,
-                                          domain='Target', split='unlabeled train')
+        Test(args, model, dataloaders['train_target'], domain='Target', split='unlabeled train')
         print('\nEvaluating test sets:')
-        Test(args, model, dataloaders['test_source'], domain='Source', split='test')
+        Best_Accuracy, Best_Recall = Test(args, model, dataloaders['test_source'], Best_Accuracy, Best_Recall, domain='Source', split='test')
         Test(args, model, dataloaders['test_target'], domain='Target', split='test')
 
-    writer.close()
+    # writer.close()
 
 
 if __name__ == '__main__':

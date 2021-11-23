@@ -97,19 +97,21 @@ def Initialize_Mean_Cluster(args, source_data_loader, target_data_loader, model,
     # Source Cluster of Mean
     Feature = []
     EndTime = time.time()
-    # source_data_loader = BulidDataloader(args, flag1='train', flag2='source')
 
     for step, (input, landmark, label) in enumerate(source_data_loader):
+        print(step, label)
         input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
         with torch.no_grad():
             feature, pred, loc_pred = model(input, landmark, useClassify, 'Source')
-        Feature.append(feature.cpu().data.numpy())
+            Feature.append(feature.cpu().data.numpy())
     Feature = np.vstack(Feature)
+    # np.save('Souce_feat.npy', Feature)
+    # Feature = np.load('Souce_feat.npy')
 
     # Using K-Means
     kmeans = KMeans(n_clusters=args.class_num, init='k-means++', algorithm='full')
     kmeans.fit(Feature)
-    centers = torch.Tensor(kmeans.cluster_centers_).to('cuda' if torch.cuda.is_available else 'cpu')
+    centers = torch.Tensor(kmeans.cluster_centers_).cuda() #to('cuda' if torch.cuda.is_available else 'cpu')
 
     if isinstance(model, nn.DataParallel):
         model.module.SourceMean.init(centers)
@@ -118,22 +120,25 @@ def Initialize_Mean_Cluster(args, source_data_loader, target_data_loader, model,
 
     print('[Source Domain] Cost time : %fs' % (time.time() - EndTime))
 
+
     # Target Cluster of Mean
     Feature = []
     EndTime = time.time()
-    # target_data_loader = BulidDataloader(args, flag1='train', flag2='target', balanced=args.num_balanced)
-
     for step, (input, landmark, label) in enumerate(target_data_loader):
+        print(step)
         input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
         with torch.no_grad():
             feature, pred, loc_pred = model(input, landmark, useClassify, 'Target')
         Feature.append(feature.cpu().data.numpy())
     Feature = np.vstack(Feature)
+    # np.save('Target_feat.npy', Feature)
+
+    # Feature = np.load('Target_feat.npy')
 
     # Using K-Means
     kmeans = KMeans(n_clusters=args.class_num, init='k-means++', algorithm='full')
     kmeans.fit(Feature)
-    centers = torch.Tensor(kmeans.cluster_centers_).to('cuda' if torch.cuda.is_available else 'cpu')
+    centers = torch.Tensor(kmeans.cluster_centers_).cuda() #to('cuda' if torch.cuda.is_available else 'cpu')
 
     if isinstance(model, nn.DataParallel):
         model.module.TargetMean.init(centers)
@@ -278,7 +283,7 @@ class CountMeanOfFeatureInCluster(nn.Module):
             self.running_mean[index], self.temple_cluster[index] = static_mean[index], []
 
     def getSample(self, input):
-
+        print(input)
         res = []
         for index in range(input.size(0)):
             res.append( torch.unsqueeze(self.running_mean[self.findClusterIndex(input[index])], 0) )
@@ -294,7 +299,7 @@ class CountMeanOfFeatureInCluster(nn.Module):
 
         pairwiseDistance = torch.nn.PairwiseDistance(p=2.0, eps=1e-06, keepdim=False)
         distance = np.array([pairwiseDistance(input.unsqueeze(0), self.running_mean[index].unsqueeze(0)) for index in range(self.class_num)])
-
+        print(np.argmin(distance))
         return np.argmin(distance)
 
 

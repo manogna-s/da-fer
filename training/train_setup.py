@@ -1,7 +1,8 @@
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 import json
 from models.GCN_utils import init_gcn
 from utils.Utils import *
+from torch.utils.tensorboard import SummaryWriter
 
 parser = argparse.ArgumentParser(description='Domain adaptation for Expression Classification')
 
@@ -12,8 +13,10 @@ parser.add_argument('--pretrained', type=str2bool, help='pretrained', default=Tr
 parser.add_argument('--GPU_ID', default='0', type=str, help='CUDA_VISIBLE_DEVICES')
 parser.add_argument('--save_checkpoint', type=str2bool, default=False, help='whether to save checkpoint')
 
+parser.add_argument('--criterion', type=str, default='ce', choices=['ce', 'focal', 'weighted_focal', 'ldam'], help='Loss function')
+
 # Dataset args
-parser.add_argument('--source', type=str, default='RAF', choices=['RAF', 'RAF_2class', 'CK+', 'SFEW', 'JAFFE'])
+parser.add_argument('--source', type=str, default='RAF') #, choices=['RAF', 'RAF_2class','RAFCK+_2class', 'RAF_balanced', 'RAF_kmeans' ,'CK+', 'SFEW', 'JAFFE', 'RAF_CK+']
 parser.add_argument('--target', type=str, default='AISIN',
                     choices=['JAFFE', 'AISIN', 'CK+', 'SFEW'])
 # set maximum no. of samples per class. Use to create balanced no. of samples.
@@ -21,6 +24,7 @@ parser.add_argument('--source_labeled', type=int, default=-1,
                     help='number of unlabeled samples (default: -1 == all samples)')  # 2465 for RAF_2class
 parser.add_argument('--target_unlabeled', type=int, default=-1,
                     help='number of unlabeled samples (default: -1 == all samples)')  # 1700 for AISIN
+parser.add_argument('--train_class_count', default=-1, type=int) #balanced samples
 
 parser.add_argument('--local_feat', type=str2bool, default=True, help='whether to use Local Feature')
 parser.add_argument('--class_num', type=int, default=7, help='number of class (default: 7)')
@@ -38,6 +42,9 @@ parser.add_argument('--use_mme', type=str2bool, default=False, help='whether to 
 parser.add_argument('--use_mcd', type=str2bool, default=False, help='whether to use MCD')
 parser.add_argument('--use_grl', type=str2bool, default=False, help='whether to use one step grl')
 parser.add_argument('--lamda_ent', type=float, default=0.01, help='weight for entropy loss')
+
+# Use MixStyle
+parser.add_argument('--use_mixstyle', type=str2bool, default=False, help='Use Mix Style')
 
 # STAR
 parser.add_argument('--use_star', type=str2bool, default=False, help='whether to use stochastic classifier')
@@ -66,9 +73,12 @@ parser.add_argument('--test_batch', type=int, default=32, help='input batch size
 parser.add_argument('--lr', type=float, default=0.0001)
 parser.add_argument('--lr_ad', type=float, default=0.001)
 
-parser.add_argument('--epochs', type=int, default=30, help='number of epochs to train (default: 10)')
+parser.add_argument('--epochs', type=int, default=40, help='number of epochs to train (default: 10)')
 parser.add_argument('--momentum', type=float, default=0.5, help='SGD momentum (default: 0.5)')
 parser.add_argument('--weight_decay', type=float, default=0.0005, help='SGD weight decay (default: 0.0005)')
+
+parser.add_argument('--use_aug', type=str2bool, default=False, help='whether to use color jitter augmentations')
+
 
 # GCN params
 parser.add_argument('--use_gcn', type=str2bool, default=False, help='whether to use GCN')
@@ -177,7 +187,7 @@ def print_experiment_info(args):
 def train_setup(args):
     # Build Dataloader
     print("Building Train and Test Dataloader...")
-    dataloaders = {'train_source': BuildDataloader(args, split='train', domain='source', max_samples=args.source_labeled),
+    dataloaders = {'train_source': BuildDataloader(args, split='train', domain='source', max_samples=args.source_labeled, use_aug=args.use_aug),
                    'train_target': BuildDataloader(args, split='train', domain='target', max_samples=args.target_unlabeled),
                    'test_source': BuildDataloader(args, split='test', domain='source'),
                    'test_target': BuildDataloader(args, split='test', domain='target')}
@@ -191,9 +201,6 @@ def train_setup(args):
     print('Done!')
     print('================================================')
 
-    # Init Mean if using GCN
-    if args.use_gcn:
-        init_gcn(args, dataloaders['train_source'], dataloaders['train_target'], model)
 
     # Set Optimizer
     print(f'Building {args.optimizer} Optimizer...')
@@ -206,7 +213,7 @@ def train_setup(args):
 
     print('================================================')
 
-    writer = SummaryWriter(os.path.join(args.out, args.log))
+    writer = None #SummaryWriter(os.path.join(args.out, args.log))
 
     # save arguments used
     with open(os.path.join(args.out,'args.txt'), 'w') as f:

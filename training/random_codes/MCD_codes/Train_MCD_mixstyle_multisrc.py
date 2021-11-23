@@ -4,13 +4,14 @@ from torch.autograd import Variable
 from models.ResNet_feat import ResClassifier
 from train_setup import *
 from utils.Loss import *
+from models.mixstyle import activate_mixstyle, deactivate_mixstyle
 import copy
 
 eta = 1.0
 num_k = 2 #4
 
 
-def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader, optimizer_g, optimizer_f, epoch,
+def Train_MCD(args, G, F1, F2, train_source1_dataloader, train_source2_dataloader, train_target_dataloader, optimizer_g, optimizer_f, epoch,
               writer, criterion):
     """Train."""
     G.train()
@@ -22,18 +23,33 @@ def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader,
     m_total_loss, m_loss1, m_loss2, m_loss_dis, m_entropy_loss = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
 
     # Get Source/Target Dataloader iterator
-    iter_source_dataloader = iter(train_source_dataloader)
+    iter_source1_dataloader = iter(train_source1_dataloader)
+    iter_source2_dataloader = iter(train_source2_dataloader)
     iter_target_dataloader = iter(train_target_dataloader)
 
-    num_iter = len(train_source_dataloader) if (len(train_source_dataloader) > len(train_target_dataloader)) else len(
+    num_iter = len(train_source1_dataloader) if (len(train_source1_dataloader) > len(train_target_dataloader)) else len(
         train_target_dataloader)
 
     for batch_index in range(num_iter):
         try:
-            data_source, landmark_source, label_source = iter_source_dataloader.next()
+            data_source1, landmark_source1, label_source1 = iter_source1_dataloader.next()
         except:
-            iter_source_dataloader = iter(train_source_dataloader)
-            data_source, landmark_source, label_source = iter_source_dataloader.next()
+            iter_source1_dataloader = iter(train_source1_dataloader)
+            data_source1, landmark_source1, label_source1 = iter_source1_dataloader.next()
+        
+        try:
+            data_source2, landmark_source2, label_source2 = iter_source2_dataloader.next()
+        except:
+            iter_source1_dataloader = iter(train_source1_dataloader)
+            data_source2, landmark_source2, label_source2 = iter_source2_dataloader.next()
+
+        data_source = Variable(torch.cat((data_source1, data_source2), 0))
+        landmark_source = Variable(torch.cat((landmark_source1, landmark_source2), 0))
+        label_source = Variable(torch.cat((label_source1, label_source2), 0))
+        perm = torch.randperm(args.train_batch)
+        data_source = data_source[perm]
+        landmark_source = landmark_source[perm]
+        label_source = label_source[perm]        
 
         try:
             data_target, landmark_target, label_target = iter_target_dataloader.next()
@@ -50,6 +66,7 @@ def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader,
         landmark = Variable(torch.cat((landmark_source, landmark_target), 0))
         label_source = Variable(label_source)
 
+        G.apply(activate_mixstyle)
         output = G(data, landmark)
         output1 = F1(output)
         output2 = F2(output)
@@ -90,31 +107,35 @@ def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader,
         entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
         entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
         loss_dis = torch.mean(torch.abs(output_t1 - output_t2))
-        F_loss = loss1 + loss2 - eta * loss_dis + args.lamda_ent * entropy_loss
+        F_loss = loss1 + loss2 + args.lamda_ent * entropy_loss
+        if epoch>0:
+            F_loss += - eta * loss_dis
         F_loss.backward()
         optimizer_f.step()
         # Step C train generator to minimize discrepancy
-        for i in range(num_k):
-            optimizer_g.zero_grad()
-            output = G(data, landmark)
-            output1 = F1(output)
-            output2 = F2(output)
+        if epoch>0:
+            for i in range(num_k):
+                G.apply(deactivate_mixstyle)
+                optimizer_g.zero_grad()
+                output = G(data, landmark)
+                output1 = F1(output)
+                output2 = F2(output)
 
-            output_s1 = output1[:batch_size, :]
-            output_s2 = output2[:batch_size, :]
-            output_t1 = output1[batch_size:, :]
-            output_t2 = output2[batch_size:, :]
+                output_s1 = output1[:batch_size, :]
+                output_s2 = output2[:batch_size, :]
+                output_t1 = output1[batch_size:, :]
+                output_t2 = output2[batch_size:, :]
 
-            loss1 = criterion(output_s1, target1)
-            loss2 = criterion(output_s2, target1)
-            output_t1 = F.softmax(output_t1)
-            output_t2 = F.softmax(output_t2)
-            loss_dis = torch.mean(torch.abs(output_t1 - output_t2))
-            entropy_loss = -torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
-            entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
+                loss1 = criterion(output_s1, target1)
+                loss2 = criterion(output_s2, target1)
+                output_t1 = F.softmax(output_t1)
+                output_t2 = F.softmax(output_t2)
+                loss_dis = torch.mean(torch.abs(output_t1 - output_t2))
+                entropy_loss = -torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
+                entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
 
-            loss_dis.backward()
-            optimizer_g.step()
+                loss_dis.backward()
+                optimizer_g.step()
 
         print('Train Ep: {} [{}/{} ({:.0f}%)]\tLoss1: {:.6f}\tLoss2: {:.6f}\t Dis: {:.6f} Entropy: {:.6f}'.format(
             epoch, batch_index * batch_size, 12000,
@@ -148,6 +169,7 @@ def Test_MCD_tsne(args, G, F1, F2, dataloaders, epoch, splits=None):
     if splits is None:  # evaluate on test splits by default
         splits = ['test_source', 'test_target']
     G.eval()
+    G.apply(deactivate_mixstyle)
     F1.eval()
     F2.eval()
     Features = []
@@ -300,30 +322,39 @@ def main():
     print_experiment_info(args)
 
     dataloaders, G, optimizer_g, writer = train_setup(args)
+
+    args.train_batch=16
+    dataloaders['train_source1'] = BuildDataloader(args, split='train', domain='source', max_samples=args.source_labeled)
+    args.source='CK+'
+    dataloaders['train_source2'] = BuildDataloader(args, split='train', domain='source', max_samples=args.source_labeled)
+    args.source='RAF'
+    args.train_batch=32
+
+
     optimizer_g, lr = lr_scheduler_withoutDecay(optimizer_g, lr=args.lr)
-    scheduler_g = optim.lr_scheduler.StepLR(optimizer_g, step_size=10, gamma=0.5, verbose=True)
+    scheduler_g = optim.lr_scheduler.StepLR(optimizer_g, step_size=20, gamma=0.1, verbose=True)
     
     F1 = ResClassifier(num_classes=args.class_num, num_layer=1)
     F2 = ResClassifier(num_classes=args.class_num, num_layer=1)
     F1.cuda()
     F2.cuda()
     optimizer_f = optim.SGD(list(F1.parameters()) + list(F2.parameters()), momentum=0.9, lr=0.001, weight_decay=0.0005)
-    scheduler_f = optim.lr_scheduler.StepLR(optimizer_f, step_size=10, gamma=0.5, verbose=True)
+    scheduler_f = optim.lr_scheduler.StepLR(optimizer_f, step_size=20, gamma=0.1, verbose=True)
 
-    G_ckpt= os.path.join(args.out, f'ckpts/MCD_G.pkl')
-    if os.path.exists(G_ckpt):
-        checkpoint = torch.load (G_ckpt, map_location='cuda')
-        G.load_state_dict (checkpoint, strict=False)
+    # G_ckpt= os.path.join(args.out, f'ckpts/MCD_G.pkl')
+    # if os.path.exists(G_ckpt):
+    #     checkpoint = torch.load (G_ckpt, map_location='cuda')
+    #     G.load_state_dict (checkpoint, strict=False)
 
-    F1_ckpt= os.path.join(args.out, f'ckpts/MCD_F1.pkl')
-    if os.path.exists(F1_ckpt):
-        checkpoint = torch.load (F1_ckpt, map_location='cuda')
-        F1.load_state_dict (checkpoint, strict=False)
+    # F1_ckpt= os.path.join(args.out, f'ckpts/MCD_F1.pkl')
+    # if os.path.exists(F1_ckpt):
+    #     checkpoint = torch.load (F1_ckpt, map_location='cuda')
+    #     F1.load_state_dict (checkpoint, strict=False)
 
-    F2_ckpt= os.path.join(args.out, f'ckpts/MCD_F2.pkl')
-    if os.path.exists(F2_ckpt):
-        checkpoint = torch.load (F2_ckpt, map_location='cuda')
-        F2.load_state_dict (checkpoint, strict=False)
+    # F2_ckpt= os.path.join(args.out, f'ckpts/MCD_F2.pkl')
+    # if os.path.exists(F2_ckpt):
+    #     checkpoint = torch.load (F2_ckpt, map_location='cuda')
+    #     F2.load_state_dict (checkpoint, strict=False)
 
     if args.show_feat:
         G_ckpt= os.path.join(args.out, f'ckpts/MCD_G.pkl')
@@ -390,8 +421,10 @@ def main():
     # Running Experiment
     print("Run Experiment...")
     for epoch in range(1, args.epochs + 1):
+        # if epoch < 5 and args.criterion == 'weighted_focal': #Try delayed reweighting
+        #     criterion = FocalLoss(gamma=1)
         if args.criterion=='ldam':
-            if epoch >5:
+            if epoch >4:
                 per_cls_weights = [1.75, 3.0, 2.0, 1.0, 1.5, 2.0, 1.25]
             else: 
                 per_cls_weights = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
@@ -402,7 +435,7 @@ def main():
 
         print(f'Epoch : {epoch}')
 
-        Train_MCD(args, G, F1, F2, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
+        Train_MCD(args, G, F1, F2, dataloaders['train_source1'], dataloaders['train_source2'], dataloaders['train_target'], optimizer_g, optimizer_f,
                   epoch, writer, criterion)
         scheduler_g.step()
         scheduler_f.step()

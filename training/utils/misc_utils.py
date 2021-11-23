@@ -8,10 +8,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.manifold import TSNE
-
+import itertools
 import matplotlib.pyplot as plt
 from matplotlib.legend_handler import HandlerBase
-
+import torchvision
+import pandas as pd
+from typing import Callable
 
 class MarkerHandler(HandlerBase):
     def create_artists(self, legend, tup,xdescent, ydescent,
@@ -51,6 +53,26 @@ def str2bool(input):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
+def plot_confusion_matrix(args, cm, labels_name, title, acc):
+    cm = cm / cm.sum(axis=1)[:, np.newaxis] 
+    thresh = cm.max() / 2
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, "{:0.2f}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+    plt.imshow(cm, interpolation='nearest') 
+    plt.title(title)  
+    plt.colorbar()
+    num_class = np.array(range(len(labels_name)))  
+    plt.xticks(num_class, labels_name, rotation=90)  
+    plt.yticks(num_class, labels_name)  
+    plt.ylabel('Target')
+    plt.xlabel('Prediction')
+    plt.imshow(cm, interpolation='nearest', cmap=plt.get_cmap('Blues'))
+    plt.tight_layout()
+    plt.savefig(os.path.join(args.out, f"acc_{acc:.3f}.png"), format='png')
+    plt.show()
 
 
 def Set_Param_Optim(args, model):
@@ -347,20 +369,23 @@ def VisualizationForTwoDomain(args, figName, model, source_dataloader, target_da
 
 
 def VizFeatures(args, epoch, model, dataloaders):
-    Visualization('{}_Source.pdf'.format(epoch), model, dataloaders['train_source'], useClassify=False,
+    Visualization(args, '{}_Source.pdf'.format(epoch), model, dataloaders['train_source'], useClassify=False,
                   domain='Source')
-    Visualization('{}_Target.pdf'.format(epoch), model, dataloaders['train_target'], useClassify=False,
+    Visualization(args, '{}_Target.pdf'.format(epoch), model, dataloaders['train_target'], useClassify=False,
                   domain='Target')
 
-    VisualizationForTwoDomain('{}_train'.format(epoch), model, dataloaders['train_source'], dataloaders['train_target'],
+    VisualizationForTwoDomain(args, '{}_train'.format(epoch), model, dataloaders['train_source'], dataloaders['train_target'],
                               useClassify=args.useClassify, showClusterCenter=False)
-    VisualizationForTwoDomain('{}_test'.format(epoch), model, dataloaders['test_source'], dataloaders['test_target'],
+    VisualizationForTwoDomain(args, '{}_test'.format(epoch), model, dataloaders['test_source'], dataloaders['test_target'],
                               useClassify=args.useClassify, showClusterCenter=False)
     return
 
-def viz_tsne(args, Feature, Label):
+def viz_tsne(args, Feature, Label, epoch='last'):
     # Using T-SNE
     tsne = TSNE(n_components=2, init='pca', random_state=0, perplexity=30, early_exaggeration=10)
+
+    # tsne = TSNE(n_components=2, init='pca', random_state=0, perplexity=5, early_exaggeration=10)
+
     embedding = tsne.fit_transform(Feature)
 
     # Draw Visualization of Feature
@@ -374,32 +399,134 @@ def viz_tsne(args, Feature, Label):
     fig = plt.figure()
     ax = plt.subplot(111)
 
+
+
     for i in range(7):
         data_source_x, data_source_y = data_norm[Label == i+14][:, 0], data_norm[Label == i+14][:, 1]
         source_scatter = plt.scatter(data_source_x, data_source_y, color="none", edgecolor=colors[i], s=5,
-                                     label=labels[i], marker="o", alpha=0.4, linewidth=0.5)
+                                     label=labels[i], marker="o", alpha=0.2, linewidth=0.5)
+    ax.legend(bbox_to_anchor = (1.05, 0.6))
 
     for i in range(7):
         data_source_x, data_source_y = data_norm[Label == i][:, 0], data_norm[Label == i][:, 1]
-        source_test_scatter = plt.scatter(data_source_x, data_source_y, color=colors[i], edgecolor='black', s=15,
-                                     label=labels[i], marker="X", alpha=0.4, linewidth=0.5)
-    ax.legend(bbox_to_anchor = (1.05, 0.6))
+        source_test_scatter = plt.scatter(data_source_x, data_source_y, color=colors[i], edgecolor='black', s=5,
+                                     label=labels[i], marker="x", alpha=0.4, linewidth=0.5)
     
-    for i in range(7):
+    for i in reversed(range(7)):
         data_target_x, data_target_y = data_norm[Label == (i + 7)][:, 0], data_norm[Label == (i + 7)][:, 1]
-        target_scatter = plt.scatter(data_target_x, data_target_y, color=colors[i], edgecolor='black', s=15,
-                                     label=labels[i], marker="D", alpha=0.6, linewidth=0.3)
+        target_scatter = plt.scatter(data_target_x, data_target_y, color=colors[i], edgecolor='black', s=10,
+                                        label=labels[i], marker="D", alpha=0.6, linewidth=0.3)
+    # plt.savefig(fname=os.path.join(args.out, f'{args.log}_fear_disgust_tsne.pdf'), format="pdf", bbox_inches='tight')
+    # return
 
-    plt.title(f'{args.log}_tsne')
+    # plt.title(f'MME {args.target}')
 
-    list_color  = ["c", "gold", "crimson"]
-    list_mak    = ["o","x","D"]
-    list_lab    = ['source train','source test','target']
+    list_color  = ["navy", "navy"]
+    list_mak    = ["o","D"]
+    list_lab    = ['source','target']
 
-    ax.legend(list(zip(list_color,list_mak)), list_lab, 
-          handler_map={tuple:MarkerHandler()}, bbox_to_anchor = (1.05, 0.6))
+    # ax.legend(list(zip(list_color,list_mak)), list_lab, 
+    #       handler_map={tuple:MarkerHandler()}, bbox_to_anchor = (1.05, 0.6))
 
     box = ax.get_position()
     ax.set_position([box.x0, box.y0, box.width * 0.8, box.height * 0.8])
-    plt.savefig(fname=os.path.join(args.out, f'{args.log}_tsne.pdf'), format="pdf", bbox_inches='tight')
+    plt.savefig(fname=os.path.join(args.out, f'{epoch}.pdf'), format="pdf", bbox_inches='tight')
+    plt.clf()
     return
+
+
+def viz_tsne_domains(args, Feature, Label, epoch='last'):
+    # Using T-SNE
+    tsne = TSNE(n_components=2, init='pca', random_state=0, perplexity=30, early_exaggeration=10)
+
+    embedding = tsne.fit_transform(Feature)
+
+    # Draw Visualization of Feature
+    colors = {0: 'blue', 1: 'red', 2: 'goldenrod'}
+    labels = {0: 'Source', 1: 'Target', 2: 'Aug source'}
+
+    data_min, data_max = np.min(embedding, 0), np.max(embedding, 0)
+    data_norm = (embedding - data_min) / (data_max - data_min)
+
+
+    plt.figure()
+
+    data_source_x, data_source_y = data_norm[Label == 0][:, 0], data_norm[Label == 0][:, 1]
+    source_test_scatter = plt.scatter(data_source_x, data_source_y, color=colors[0], edgecolor='black', s=2,
+                                     label=labels[0], alpha=0.4, linewidth=0.5)
+
+    data_target_x, data_target_y = data_norm[Label == 1][:, 0], data_norm[Label == 1][:, 1]
+    target_test_scatter = plt.scatter(data_target_x, data_target_y, color=colors[1], edgecolor='black', s=4,
+                                     label=labels[1], alpha=0.4, linewidth=0.5, marker='D')
+    
+    data_augsource_x, data_augsource_y = data_norm[Label == 2][:, 0], data_norm[Label == 2][:, 1]
+    target_test_scatter = plt.scatter(data_augsource_x, data_augsource_y, color=colors[2], edgecolor='black', s=2,
+                                     label=labels[2], alpha=0.4, linewidth=0.5)
+
+    list_color  = ["navy", "navy"]
+    list_mak    = ["o","D"]
+    list_lab    = ['source','target']
+
+    # ax.legend(list(zip(list_color,list_mak)), list_lab, 
+    #       handler_map={tuple:MarkerHandler()}, bbox_to_anchor = (1.05, 0.6))
+
+    # box = ax.get_position()
+    # ax.set_position([box.x0, box.y0, box.width * 0.8, box.height * 0.8])
+    plt.legend()
+    plt.savefig(fname=os.path.join(args.out, f'{epoch}.pdf'), format="pdf", bbox_inches='tight')
+    plt.clf()
+    return
+
+
+class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
+    """Samples elements randomly from a given list of indices for imbalanced dataset
+    Arguments:
+        indices: a list of indices
+        num_samples: number of samples to draw
+        callback_get_label: a callback-like function which takes two arguments - dataset and index
+    """
+
+    def __init__(self, dataset, indices: list = None, num_samples: int = None, callback_get_label: Callable = None):
+        # if indices is not provided, all elements in the dataset will be considered
+        self.indices = list(range(len(dataset))) if indices is None else indices
+
+        # define custom callback
+        self.callback_get_label = callback_get_label
+
+        # if num_samples is not provided, draw `len(indices)` samples in each iteration
+        self.num_samples = len(self.indices) if num_samples is None else num_samples
+
+        # distribution of classes in the dataset
+        df = pd.DataFrame()
+        df["label"] = self._get_labels(dataset)
+        df.index = self.indices
+        df = df.sort_index()
+
+        label_to_count = df["label"].value_counts()
+
+        weights = 1.0 / label_to_count[df["label"]]
+
+        self.weights = torch.DoubleTensor(weights.to_list())
+
+    def _get_labels(self, dataset):
+        if self.callback_get_label:
+            return self.callback_get_label(dataset)
+        elif isinstance(dataset, torchvision.datasets.MNIST):
+            return dataset.train_labels.tolist()
+        elif isinstance(dataset, torchvision.datasets.ImageFolder):
+            return [x[1] for x in dataset.imgs]
+        elif isinstance(dataset, torchvision.datasets.DatasetFolder):
+            return dataset.samples[:][1]
+        elif isinstance(dataset, torch.utils.data.Subset):
+            return dataset.dataset.imgs[:][1]
+        elif isinstance(dataset, torch.utils.data.Dataset):
+            return dataset.get_labels()
+        else:
+            raise NotImplementedError
+
+    def __iter__(self):
+        return (self.indices[i] for i in torch.multinomial(self.weights, self.num_samples, replacement=True))
+
+    def __len__(self):
+        return self.num_samples
+

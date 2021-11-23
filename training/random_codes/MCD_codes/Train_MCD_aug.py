@@ -5,122 +5,9 @@ from models.ResNet_feat import ResClassifier
 from train_setup import *
 from utils.Loss import *
 import copy
-import torch.distributions.normal as normal
 
 eta = 1.0
 num_k = 2 #4
-
-class StochasticClassifier_mine(nn.Module):
-    def __init__(self, num_features, num_classes, rho=-4):
-        super(StochasticClassifier_mine, self).__init__()
-
-        bottleneck_dim = 128
-        self.fc1=nn.Sequential(
-            nn.Dropout(0.5),
-            nn.Linear(num_features, bottleneck_dim),
-            nn.BatchNorm1d(bottleneck_dim),
-            nn.ReLU(),
-        )
-        num_features =bottleneck_dim
-        print(f'Using rho {rho} for softplus')
-
-        # self.weight = torch.zeros((num_classes, num_features))
-
-        self.weight_mu = nn.Parameter(torch.randn(num_classes, num_features)) #nn.Parameter(torch.empty_like(self.weight, requires_grad=True))
-        self.weight_rho = nn.Parameter(torch.zeros(num_classes, num_features)) #nn.Parameter(torch.empty_like(self.weight, requires_grad=True))
-
-        self.bias = nn.Parameter(torch.zeros(num_classes))
-
-        nn.init.xavier_normal_(self.weight_mu)
-        nn.init.constant_(self.weight_rho, rho)
-
-    def reparameterize(self, sample=False):
-        weight_std = torch.log(1 + torch.exp(self.weight_rho))
-
-        if self.training or sample:
-            weight_eps = torch.randn_like(weight_std)
-        else:
-            weight_eps = torch.zeros_like(weight_std)
-
-        self.weight = self.weight_mu + weight_eps * weight_std
-        return
-
-    def forward(self, x):
-        self.reparameterize()
-        x=self.fc1(x)
-        out = F.linear(x, self.weight, self.bias)
-        return out
-
-class StochasticClassifier_fscil(nn.Module):
-    def __init__(self, num_features, num_classes, temp=0.05):
-        super().__init__()
-        self.mu = nn.Parameter(0.01 * torch.randn(num_classes, num_features))
-        self.sigma = nn.Parameter(torch.zeros(num_classes, num_features))
-        self.bias = nn.Parameter(torch.zeros(num_classes))
-        nn.init.kaiming_uniform_(self.mu)
-
-    def forward(self, x, stochastic=True):
-        mu = self.mu
-        sigma = self.sigma
-        if stochastic and self.training:
-            sigma = F.softplus(sigma - 4) # when sigma=0, softplus(sigma-4)=0.0181
-            weight = sigma * torch.randn_like(mu) + mu
-        else:
-            weight = mu
-        score = F.linear(x, weight, self.bias)
-        return score
-
-class StochasticClassifier(nn.Module):
-    def __init__(self, num_features, num_classes):
-        super().__init__()
-        bottleneck_dim = 128
-        self.fc1=nn.Sequential(
-            # nn.Dropout(0.5),
-            nn.Linear(num_features, bottleneck_dim),
-            nn.BatchNorm1d(bottleneck_dim),
-            nn.ReLU(),
-            # nn.Dropout(0.5),
-            # nn.Linear(bottleneck_dim, bottleneck_dim),
-            # nn.BatchNorm1d(bottleneck_dim),
-            # nn.ReLU(),
-        )
-
-        num_features =bottleneck_dim
-        self.mu = nn.Parameter(torch.randn(num_classes, num_features))
-        self.sigma = nn.Parameter(torch.zeros(num_classes, num_features))
-        self.bias = nn.Parameter(torch.zeros(num_classes))
-        nn.init.kaiming_uniform_(self.mu)
-
-
-    def forward(self, x, stochastic=True):
-        x=self.fc1(x)
-        if stochastic and self.training:
-            sigma = F.softplus(self.sigma - 2) # when sigma=0, softplus(sigma-4)=0.0181
-            distribution = normal.Normal(self.mu, sigma)
-            weight = distribution.rsample()
-        else:
-            weight = self.sigma
-        score = F.linear(x, weight, self.bias)
-        return score
-
-class StochasticClassifier_basic(nn.Module):
-    def __init__(self, num_features, num_classes):
-        super().__init__()
-
-        self.mu = nn.Parameter(torch.randn(num_classes, num_features))
-        self.sigma = nn.Parameter(torch.zeros(num_classes, num_features))
-        self.bias = nn.Parameter(torch.zeros(num_classes))
-        nn.init.kaiming_uniform_(self.mu)
-
-    def forward(self, x, stochastic=True):
-        if stochastic and self.training:
-            sigma = F.softplus(self.sigma - 4) # when sigma=0, softplus(sigma-4)=0.0181, softplus(sigma-2)=0.1269
-            distribution = normal.Normal(self.mu, sigma)
-            weight = distribution.rsample()
-        else:
-            weight = self.sigma
-        score = F.linear(x, weight, self.bias)
-        return score
 
 
 def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader, optimizer_g, optimizer_f, epoch,
@@ -171,8 +58,8 @@ def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader,
         output_s2 = output2[:batch_size, :]
         output_t1 = output1[batch_size:, :]
         output_t2 = output2[batch_size:, :]
-        output_t1 = F.softmax(output_t1, dim=1)
-        output_t2 = F.softmax(output_t2, dim=1)
+        output_t1 = F.softmax(output_t1)
+        output_t2 = F.softmax(output_t2)
 
         entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
         entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
@@ -196,8 +83,8 @@ def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader,
         output_s2 = output2[:batch_size, :]
         output_t1 = output1[batch_size:, :]
         output_t2 = output2[batch_size:, :]
-        output_t1 = F.softmax(output_t1, dim=1)
-        output_t2 = F.softmax(output_t2, dim=1)
+        output_t1 = F.softmax(output_t1)
+        output_t2 = F.softmax(output_t2)
         loss1 = criterion(output_s1, target1)
         loss2 = criterion(output_s2, target1)
         entropy_loss = - torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
@@ -220,8 +107,8 @@ def Train_MCD(args, G, F1, F2, train_source_dataloader, train_target_dataloader,
 
             loss1 = criterion(output_s1, target1)
             loss2 = criterion(output_s2, target1)
-            output_t1 = F.softmax(output_t1, dim=1)
-            output_t2 = F.softmax(output_t2, dim=1)
+            output_t1 = F.softmax(output_t1)
+            output_t2 = F.softmax(output_t2)
             loss_dis = torch.mean(torch.abs(output_t1 - output_t2))
             entropy_loss = -torch.mean(torch.log(torch.mean(output_t1, 0) + 1e-6))
             entropy_loss -= torch.mean(torch.log(torch.mean(output_t2, 0) + 1e-6))
@@ -281,6 +168,7 @@ def Test_MCD_tsne(args, G, F1, F2, dataloaders, epoch, splits=None):
                 feat = G(input, landmark)
                 output1 = F1(feat)
                 output2 = F2(feat)
+                
                 Features.append (feat.cpu().data.numpy())
                 Labels.append (label.cpu().data.numpy()+14)
             Compute_Accuracy(args, output1, label, acc1, prec1, recall1)
@@ -351,6 +239,153 @@ def Test_MCD_tsne(args, G, F1, F2, dataloaders, epoch, splits=None):
     viz_tsne(args, Features_tar_test, Labels_tar_test, epoch=f'test_target_{epoch}')
     return
 
+
+
+def Test_MCD(args, G, F1, F2, dataloaders, epoch, splits=None):
+    if splits is None:  # evaluate on test splits by default
+        splits = ['test_source', 'test_target']
+    G.eval()
+    F1.eval()
+    F2.eval()
+    Features = []
+    Labels = []
+    for split in splits:
+        print(f'\n[{split}]')
+
+        iter_dataloader = iter(dataloaders[split])
+        acc1, prec1, recall1 = [AverageMeter() for i in range(args.class_num)], \
+                               [AverageMeter() for i in range(args.class_num)], \
+                               [AverageMeter() for i in range(args.class_num)]
+        acc2, prec2, recall2 = [AverageMeter() for i in range(args.class_num)], \
+                               [AverageMeter() for i in range(args.class_num)], \
+                               [AverageMeter() for i in range(args.class_num)]
+        for batch_index, (input, landmark, label) in enumerate(iter_dataloader):
+            input, landmark, label = input.cuda(), landmark.cuda(), label.cuda()
+            with torch.no_grad():
+                feat = G(input, landmark)
+                output1 = F1(feat)
+                output2 = F2(feat)
+                
+                Features.append (feat.cpu().data.numpy())
+                if split == 'train_source':    
+                    Labels.append (label.cpu().data.numpy()+14)
+                if split == 'test_source':    
+                    Labels.append (label.cpu().data.numpy())
+                if split == 'test_target':    
+                    Labels.append (label.cpu().data.numpy()+7)
+                if split == 'train_target':    
+                    Labels.append (label.cpu().data.numpy()+7)
+
+            Compute_Accuracy(args, output1, label, acc1, prec1, recall1)
+            Compute_Accuracy(args, output2, label, acc2, prec2, recall2)
+
+        print('Classifier 1')
+        AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc1, prec1, recall1, args.class_num)
+
+        print('Classifier 2')
+        AccuracyInfo, acc_avg, prec_avg, recall_avg, f1_avg = Show_Accuracy(acc2, prec2, recall2, args.class_num)
+
+
+    Features = np.vstack(Features)
+    Labels = np.concatenate(Labels)
+    viz_tsne(args, Features, Labels, epoch=f'{splits[1]}_{epoch}')
+    return
+
+def domain_tsne(args, G, dataloaders, epoch):
+    splits = ['train_source', 'train_target']
+    G.eval()
+
+    Features = []
+    Labels = []
+    layer= 'res2'
+    for split in splits:
+        print(f'\n[{split}]')
+        iter_dataloader = iter(dataloaders[split])
+        acc, prec, recall = [AverageMeter() for i in range(args.class_num)], \
+                            [AverageMeter() for i in range(args.class_num)], \
+                            [AverageMeter() for i in range(args.class_num)]
+        for batch_index, (input, landmark, label) in enumerate(iter_dataloader):
+            input, landmark, label = input.cuda(), landmark.cuda(), label
+
+            with torch.no_grad():
+                feature = G(input, landmark)
+                feature = G.get_style_features(input, landmark, layer=layer)
+
+            Features.append(feature.cpu().data.numpy())
+            Label = label.cpu().data.numpy()
+            if split == 'train_source':
+                Label[:]=0
+            elif split == 'train_target':
+                Label[:]=1
+            Labels.append(Label)
+
+    filename = f'{args.source}_to_{args.target}_{layer}_mu_{epoch}'
+
+    Features = np.vstack(Features)
+    Labels = np.concatenate(Labels)
+    viz_tsne_domains(args, Features, Labels, filename)
+    return
+
+def aug_domain_tsne(args, G, dataloaders, aug_dataloaders, epoch):
+    splits = ['train_source', 'train_target']
+    G.eval()
+    layer= 'res2'
+
+    Features_base = []
+    Labels_base = []
+    for split in splits:
+        print(f'{split}')
+        loader = dataloaders[split]
+        iter_dataloader = iter(loader)
+        for batch_index, (input, landmark, label) in enumerate(iter_dataloader):
+            input, landmark, label = input.cuda(), landmark.cuda(), label
+
+            with torch.no_grad():
+                feature = G(input, landmark)
+                feature = G.get_style_features(input, landmark, layer=layer)
+
+                Features_base.append(feature.cpu().data.numpy())
+                Label = label.cpu().data.numpy()
+                if split == 'train_source':
+                    Label[:]=0
+                elif split == 'train_target':
+                    Label[:]=1
+                Labels_base.append(Label)
+
+    for aug in aug_dataloaders:
+        split= 'aug_train_source'
+
+        Features = copy.deepcopy(Features_base)
+        Labels = copy.deepcopy(Labels_base)
+        print(f'{split}_{aug}')
+
+        loader= aug_dataloaders[aug]
+        iter_dataloader = iter(loader)
+        for batch_index, (input, landmark, label) in enumerate(iter_dataloader):
+            input, landmark, label = input.cuda(), landmark.cuda(), label
+
+            with torch.no_grad():
+                feature = G(input, landmark)
+                feature = G.get_style_features(input, landmark, layer=layer)
+
+            Features.append(feature.cpu().data.numpy())
+            Label = label.cpu().data.numpy()
+            if split == 'train_source':
+                Label[:]=0
+            elif split == 'train_target':
+                Label[:]=1
+            elif split == 'aug_train_source':
+                Label[:]=2
+            Labels.append(Label)
+
+        filename = f'style_tsne/{aug}/{aug}_{layer}_mu_{epoch}'
+
+        Features = np.vstack(Features)
+        Labels = np.concatenate(Labels)
+        viz_tsne_domains(args, Features, Labels, filename)
+    return
+
+
 def main():
     """Main."""
     torch.manual_seed(args.seed)
@@ -358,50 +393,133 @@ def main():
     # Experiment Information
     print_experiment_info(args)
 
+    args.source='RAF_balanced'
+    balanced_train_loaders={'train_source': BuildDataloader(args, split='train', domain='source'),
+                            'train_target': BuildDataloader(args, split='train', domain='target')}
+    aug_train_dataloaders = {'Autocontrast': Build_AugDataloader(args, split='train', domain='source', aug_transform='Autocontrast'),
+                             'Brightness': Build_AugDataloader(args, split='train', domain='source', aug_transform='Brightness'),
+                             'Color': Build_AugDataloader(args, split='train', domain='source', aug_transform='Color'),
+                             'Contrast': Build_AugDataloader(args, split='train', domain='source', aug_transform='Contrast')}
+    args.source='RAF'
     dataloaders, G, optimizer_g, writer = train_setup(args)
+
     optimizer_g, lr = lr_scheduler_withoutDecay(optimizer_g, lr=args.lr)
     scheduler_g = optim.lr_scheduler.StepLR(optimizer_g, step_size=10, gamma=0.5, verbose=True)
     
-    F1 = StochasticClassifier_mine(num_features = G.output_num(), num_classes=args.class_num)
+    F1 = ResClassifier(num_classes=args.class_num, num_layer=1)
+    F2 = ResClassifier(num_classes=args.class_num, num_layer=1)
     F1.cuda()
-    print(F1)
-
-    # F2 = StochasticClassifier(num_features = G.output_num(), num_classes=args.class_num)
-    # F2.cuda()
-    optimizer_f = optim.SGD(F1.parameters(), momentum=0.9, lr=0.001, weight_decay=0.0005)
+    F2.cuda()
+    optimizer_f = optim.SGD(list(F1.parameters()) + list(F2.parameters()), momentum=0.9, lr=0.001, weight_decay=0.0005)
     scheduler_f = optim.lr_scheduler.StepLR(optimizer_f, step_size=10, gamma=0.5, verbose=True)
+
+    G_ckpt= os.path.join(args.out, f'ckpts/MCD_G.pkl')
+    if os.path.exists(G_ckpt):
+        checkpoint = torch.load (G_ckpt, map_location='cuda')
+        G.load_state_dict (checkpoint, strict=False)
+
+    F1_ckpt= os.path.join(args.out, f'ckpts/MCD_F1.pkl')
+    if os.path.exists(F1_ckpt):
+        checkpoint = torch.load (F1_ckpt, map_location='cuda')
+        F1.load_state_dict (checkpoint, strict=False)
+
+    F2_ckpt= os.path.join(args.out, f'ckpts/MCD_F2.pkl')
+    if os.path.exists(F2_ckpt):
+        checkpoint = torch.load (F2_ckpt, map_location='cuda')
+        F2.load_state_dict (checkpoint, strict=False)
+
+    if args.show_feat:
+        G_ckpt= os.path.join(args.out, f'ckpts/MCD_G.pkl')
+        if os.path.exists(G_ckpt):
+            checkpoint = torch.load (G_ckpt, map_location='cuda')
+            G.load_state_dict (checkpoint, strict=False)
+
+        F1_ckpt= os.path.join(args.out, f'ckpts/MCD_F1.pkl')
+        if os.path.exists(F1_ckpt):
+            checkpoint = torch.load (F1_ckpt, map_location='cuda')
+            F1.load_state_dict (checkpoint, strict=False)
+
+        F2_ckpt= os.path.join(args.out, f'ckpts/MCD_F2.pkl')
+        if os.path.exists(F2_ckpt):
+            checkpoint = torch.load (F2_ckpt, map_location='cuda')
+            F2.load_state_dict (checkpoint, strict=False)
+        Test_MCD_tsne(args, G, F1, F2, dataloaders, 30, splits=['test_source', 'train_target', 'test_target'])
+        return
+
+    if args.criterion == 'ce':
+        criterion = nn.CrossEntropyLoss()
+    elif args.criterion == 'focal':
+        criterion = FocalLoss(gamma=1)
+    elif args.criterion == 'weighted_focal':
+        if args.source == 'RAF_balanced':
+            cls_num_list= np.array([713, 262, 713, 713, 713, 682, 713])
+        else: #RAF
+            cls_num_list= np.array([1259, 262, 713, 4705, 1885, 682, 2465])
+        beta = 0.9999
+        effective_num = 1.0 - np.power(beta, cls_num_list)
+        per_cls_weights = (1.0 - beta) / np.array(effective_num)
+        per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+         #[0.65831665 3.01150101 1.13164193 0.20750166 0.45330163 1.18126904 0.35646808]
+        per_cls_weights = [1.75, 3.0, 2.0, 1.0, 1.5, 2.0, 1.25]
+        print(per_cls_weights)
+        class_weights = torch.FloatTensor(per_cls_weights).cuda()
+        criterion = FocalLoss(weight=class_weights, gamma=1)
+
+    elif args.criterion == 'ldam':
+        if args.source == 'RAF_balanced':
+            cls_num_list= np.array([713, 262, 713, 713, 713, 682, 713])
+        else: #RAF
+            cls_num_list= np.array([1259, 262, 713, 4705, 1885, 682, 2465])
+        idx = 0
+        betas = [0, 0.9999]
+        effective_num = 1.0 - np.power(betas[idx], cls_num_list)
+        per_cls_weights = (1.0 - betas[idx]) / np.array(effective_num)
+        per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+        per_cls_weights = [1.75, 3.0, 2.0, 1.0, 1.5, 2.0, 1.25]
+        per_cls_weights = torch.FloatTensor(per_cls_weights).cuda()
+    
+    def get_drw_weights(args, epoch, cls_num_list):
+        if True:
+            idx = 0 if epoch <= 5 else 1
+            betas = [0, 0.9999]
+            effective_num = 1.0 - np.power(betas[idx], cls_num_list)
+            per_cls_weights = (1.0 - betas[idx]) / np.array(effective_num)
+            per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+            per_cls_weights = torch.FloatTensor(per_cls_weights).cuda()
+        return per_cls_weights
 
     print(f'Using {args.criterion} loss')
 
     # Running Experiment
     print("Run Experiment...")
     for epoch in range(1, args.epochs + 1):
+        # if epoch < 5 and args.criterion == 'weighted_focal': #Try delayed reweighting
+        #     criterion = FocalLoss(gamma=1)
         if args.criterion=='ldam':
             if epoch >5:
                 per_cls_weights = [1.75, 3.0, 2.0, 1.0, 1.5, 2.0, 1.25]
             else: 
                 per_cls_weights = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+            # per_cls_weights = get_drw_weights(args, epoch, cls_num_list)
             print(f'Epoch: {epoch}, per cls weights: {per_cls_weights}')
             per_cls_weights = torch.FloatTensor(per_cls_weights).cuda()
             criterion = LDAMLoss(cls_num_list, weight=per_cls_weights)
 
         print(f'Epoch : {epoch}')
 
-        # checkpoint = torch.load ('/home/manogna/da-fer/training/logs_STAR/sfew_fc_ft_star/ckpts/MCD_G_1.pkl', map_location='cuda')
-        # G.load_state_dict (checkpoint, strict=False)
-        # checkpoint = torch.load ('/home/manogna/da-fer/training/logs_STAR/sfew_fc_ft_star/ckpts/MCD_F1_1.pkl', map_location='cuda')
-        # F1.load_state_dict (checkpoint, strict=False)
-
-        Train_MCD(args, G, F1, F1, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
+        Train_MCD(args, G, F1, F2, dataloaders['train_source'], dataloaders['train_target'], optimizer_g, optimizer_f,
                   epoch, writer, criterion)
         scheduler_g.step()
         scheduler_f.step()
         print('\nEvaluation ...')
-        Test_MCD_tsne(args, G, F1, F1, dataloaders, epoch, splits=['test_source', 'train_target', 'test_target'])
+        Test_MCD_tsne(args, G, F1, F2, dataloaders, epoch, splits=['test_source', 'train_target', 'test_target'])
+        domain_tsne(args, G, dataloaders, epoch)
+        aug_domain_tsne(args, G, balanced_train_loaders, aug_train_dataloaders, epoch)
 
-        if args.save_checkpoint and epoch%5:
+        if args.save_checkpoint and epoch%5==0:
             torch.save(G.state_dict(), os.path.join(args.out, f'ckpts/MCD_G_{epoch}.pkl'))
             torch.save(F1.state_dict(), os.path.join(args.out, f'ckpts/MCD_F1_{epoch}.pkl'))
+            torch.save(F2.state_dict(), os.path.join(args.out, f'ckpts/MCD_F2_{epoch}.pkl'))
     writer.close()
 
 
